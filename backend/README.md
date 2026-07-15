@@ -30,6 +30,24 @@ against it before `npm run import`.
 Set `EXPO_PUBLIC_API_BASE_URL` in the repo root `.env` (see `src/config.js`).
 Defaults to `http://localhost:3000`.
 
+## Tests
+
+```bash
+npm test
+```
+
+Runs against `TEST_DATABASE_URL` (falls back to `DATABASE_URL`, then a local
+`hydrants_test` database). CI (`.github/workflows/backend-ci.yml`) spins up a
+disposable `postgis` service container automatically.
+
+## Web map support
+
+The app's map (`src/Map.js` / `src/Map.web.js`) uses `react-native-maps` on
+iOS/Android and `@teovilla/react-native-web-maps` (Google Maps JS SDK) on web.
+The web build needs a Google Maps API key — set
+`EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` in the repo root `.env` (see
+`src/config.js`), otherwise the map area renders blank on web.
+
 ## TODO — open for anyone to pick up
 
 - [ ] Deploy the backend somewhere reachable from a real device (Fly.io,
@@ -37,8 +55,3 @@ Defaults to `http://localhost:3000`.
 - [ ] Periodic re-sync job pulling fresh data from the Overpass API instead
       of the one-time static `slovenia.json` import.
 - [ ] `POST /hydrants/:id/report` — let users flag incorrect/missing data.
-- [ ] Web support for the map (`react-native-maps` has no web renderer;
-      needs a shim like `@teovilla/react-native-web-maps` or a web-specific
-      map component) if the app should also run in a browser.
-- [ ] Automated tests for the API routes and import script.
-- [ ] CI workflow to run tests/lint on push.
