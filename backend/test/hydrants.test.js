@@ -14,6 +14,7 @@ const healthHandler = require('../api/health');
 const bboxHandler = require('../api/hydrants/index');
 const nearbyHandler = require('../api/hydrants/nearby');
 const byIdHandler = require('../api/hydrants/[id]');
+const reportHandler = require('../api/hydrants/[id]/report');
 
 let pool;
 
@@ -28,7 +29,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
-  await pool.query('TRUNCATE hydrants');
+  await pool.query('TRUNCATE hydrants CASCADE');
   await pool.query(`
     INSERT INTO hydrants (id, geom, properties) VALUES
       (1, ST_SetSRID(ST_MakePoint(14.5, 46.05), 4326)::geography, '{"ref":"A"}'),
@@ -92,4 +93,36 @@ test('GET /api/hydrants/:id 400s for a non-numeric id', async () => {
   const res = createMockRes();
   await byIdHandler({ method: 'GET', query: { id: 'abc' } }, res);
   assert.equal(res.statusCode, 400);
+});
+
+test('POST /api/hydrants/:id/report stores a report', async () => {
+  const res = createMockRes();
+  await reportHandler(
+    { method: 'POST', query: { id: '1' }, body: { sporocilo: 'Manjka premer cevi.' } },
+    res
+  );
+  assert.equal(res.statusCode, 201);
+  assert.equal(Number(res.body.hydrant_id), 1);
+  assert.equal(res.body.sporocilo, 'Manjka premer cevi.');
+});
+
+test('POST /api/hydrants/:id/report requires a message', async () => {
+  const res = createMockRes();
+  await reportHandler({ method: 'POST', query: { id: '1' }, body: {} }, res);
+  assert.equal(res.statusCode, 400);
+});
+
+test('POST /api/hydrants/:id/report rejects a non-existent hydrant', async () => {
+  const res = createMockRes();
+  await reportHandler(
+    { method: 'POST', query: { id: '999999' }, body: { sporocilo: 'Test' } },
+    res
+  );
+  assert.equal(res.statusCode, 400);
+});
+
+test('GET /api/hydrants/:id/report is not allowed', async () => {
+  const res = createMockRes();
+  await reportHandler({ method: 'GET', query: { id: '1' } }, res);
+  assert.equal(res.statusCode, 405);
 });

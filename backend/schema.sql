@@ -11,6 +11,15 @@ CREATE TABLE IF NOT EXISTS hydrants (
 CREATE INDEX IF NOT EXISTS hydrants_geom_idx ON hydrants USING GIST (geom);
 CREATE INDEX IF NOT EXISTS hydrants_properties_idx ON hydrants USING GIN (properties);
 
+CREATE TABLE IF NOT EXISTS hydrant_report (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  hydrant_id BIGINT NOT NULL REFERENCES hydrants(id) ON DELETE CASCADE,
+  sporocilo TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS hydrant_report_hydrant_idx ON hydrant_report (hydrant_id);
+
 -- Accounts, teams (e.g. fire brigades) and their subscriptions/vehicles.
 CREATE TABLE IF NOT EXISTS uporabnik (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

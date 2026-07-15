@@ -23,7 +23,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
-  await pool.query('TRUNCATE hydrants');
+  await pool.query('TRUNCATE hydrants CASCADE');
 });
 
 const FEATURE = { id: 100, geometry: { coordinates: [14.5, 46.05] }, properties: { ref: 'X' } };

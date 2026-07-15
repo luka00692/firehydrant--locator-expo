@@ -32,6 +32,7 @@ Hydrants:
 - `GET /api/hydrants?minLat&minLon&maxLat&maxLon` — hydrants in a map viewport
 - `GET /api/hydrants/nearby?lat&lon&limit` — nearest hydrants to a point
 - `GET /api/hydrants/:id`
+- `POST /api/hydrants/:id/report` — flag a hydrant's data as wrong/missing (body: `{ "sporocilo": "..." }`)
 
 Accounts / teams (`uporabnik`/`skupina`/`paket`/`clanstvo`/`vozilo` — see
 `schema.sql` for the full data model):
@@ -58,6 +59,20 @@ a raw `500` — see `lib/dbError.js`.
 4. Set the `DATABASE_URL` environment variable in Vercel to Neon's **pooled**
    connection string (routes through PgBouncer — required since each
    function invocation opens its own connection; see `lib/db.js`).
+5. (Optional but recommended) Set a `CRON_SECRET` environment variable —
+   Vercel Cron automatically sends it as `Authorization: Bearer <value>` on
+   its own requests, and `api/cron/resync.js` rejects any request missing a
+   matching header once the variable is set.
+
+## Overpass re-sync
+
+`vercel.json` schedules `api/cron/resync.js` daily via Vercel Cron. It
+queries the Overpass API for every `emergency=fire_hydrant` node in Slovenia
+and upserts them into `hydrants` using the same logic as
+`scripts/importHydrants.js`, so OSM edits eventually propagate without
+needing a fresh app release. Not covered by the test suite (it depends on
+Overpass' live API) — verify manually after deploying by calling the route
+once (with the `Authorization` header if `CRON_SECRET` is set).
 
 ## Connecting the Expo app
 
