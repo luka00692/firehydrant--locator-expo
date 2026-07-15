@@ -1,0 +1,13 @@
+[
+  { "name": "Ljubljana", "center": [46.0569, 14.5058], "zoom": 13 },
+  { "name": "Maribor", "center": [46.5547, 15.6459], "zoom": 13 },
+  { "name": "Celje", "center": [46.2309, 15.2601], "zoom": 13 },
+  { "name": "Kranj", "center": [46.2437, 14.3557], "zoom": 13 },
+  { "name": "Novo Mesto", "center": [45.8039, 15.1687], "zoom": 13 },
+  { "name": "Ptuj", "center": [46.4198, 15.8695], "zoom": 13 },
+  { "name": "Koper", "center": [45.5481, 13.7302], "zoom": 13 },
+  { "name": "Murska Sobota", "center": [46.6636, 16.1662], "zoom": 13 },
+  { "name": "Nova Gorica", "center": [45.9558, 13.6483], "zoom": 13 },
+  { "name": "Slovenj Gradec", "center": [46.5097, 15.0812], "zoom": 13 },
+  { "name": "Trbovlje", "center": [46.1547, 15.0522], "zoom": 13 }
+]
