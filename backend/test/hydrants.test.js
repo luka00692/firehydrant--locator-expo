@@ -3,27 +3,27 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { Pool } = require('pg');
-const { buildApp } = require('../src/app');
 
-const DATABASE_URL =
+process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ||
   process.env.DATABASE_URL ||
   'postgres://postgres:hydrant@localhost:5432/hydrants_test';
 
+const { createMockRes } = require('./helpers/mockRes');
+const healthHandler = require('../api/health');
+const bboxHandler = require('../api/hydrants/index');
+const nearbyHandler = require('../api/hydrants/nearby');
+const byIdHandler = require('../api/hydrants/[id]');
+
 let pool;
-let app;
 
 before(async () => {
-  pool = new Pool({ connectionString: DATABASE_URL });
+  pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const schema = fs.readFileSync(path.join(__dirname, '..', 'schema.sql'), 'utf8');
   await pool.query(schema);
-
-  app = buildApp({ connectionString: DATABASE_URL, logger: false });
-  await app.ready();
 });
 
 after(async () => {
-  await app.close();
   await pool.end();
 });
 
@@ -37,47 +37,59 @@ beforeEach(async () => {
   `);
 });
 
-test('GET /health returns ok', async () => {
-  const res = await app.inject({ method: 'GET', url: '/health' });
+test('GET /api/health returns ok', async () => {
+  const res = createMockRes();
+  await healthHandler({ method: 'GET', query: {} }, res);
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.json(), { status: 'ok' });
+  assert.deepEqual(res.body, { status: 'ok' });
 });
 
-test('GET /hydrants filters by bbox', async () => {
-  const res = await app.inject({
-    method: 'GET',
-    url: '/hydrants?minLat=46&minLon=14&maxLat=46.1&maxLon=14.6'
-  });
+test('GET /api/hydrants filters by bbox', async () => {
+  const res = createMockRes();
+  await bboxHandler(
+    { method: 'GET', query: { minLat: '46', minLon: '14', maxLat: '46.1', maxLon: '14.6' } },
+    res
+  );
   assert.equal(res.statusCode, 200);
-  const ids = res.json().map((h) => Number(h.id)).sort();
+  const ids = res.body.map((h) => Number(h.id)).sort();
   assert.deepEqual(ids, [1, 2]);
 });
 
-test('GET /hydrants/nearby orders by distance and respects limit', async () => {
-  const res = await app.inject({ method: 'GET', url: '/hydrants/nearby?lat=46.05&lon=14.5&limit=1' });
-  assert.equal(res.statusCode, 200);
-  const rows = res.json();
-  assert.equal(rows.length, 1);
-  assert.equal(Number(rows[0].id), 1);
-});
-
-test('GET /hydrants/nearby requires lat/lon', async () => {
-  const res = await app.inject({ method: 'GET', url: '/hydrants/nearby' });
+test('GET /api/hydrants requires bbox params', async () => {
+  const res = createMockRes();
+  await bboxHandler({ method: 'GET', query: {} }, res);
   assert.equal(res.statusCode, 400);
 });
 
-test('GET /hydrants/:id returns the hydrant', async () => {
-  const res = await app.inject({ method: 'GET', url: '/hydrants/1' });
+test('GET /api/hydrants/nearby orders by distance and respects limit', async () => {
+  const res = createMockRes();
+  await nearbyHandler({ method: 'GET', query: { lat: '46.05', lon: '14.5', limit: '1' } }, res);
   assert.equal(res.statusCode, 200);
-  assert.equal(Number(res.json().id), 1);
+  assert.equal(res.body.length, 1);
+  assert.equal(Number(res.body[0].id), 1);
 });
 
-test('GET /hydrants/:id 404s for a missing id', async () => {
-  const res = await app.inject({ method: 'GET', url: '/hydrants/999' });
+test('GET /api/hydrants/nearby requires lat/lon', async () => {
+  const res = createMockRes();
+  await nearbyHandler({ method: 'GET', query: {} }, res);
+  assert.equal(res.statusCode, 400);
+});
+
+test('GET /api/hydrants/:id returns the hydrant', async () => {
+  const res = createMockRes();
+  await byIdHandler({ method: 'GET', query: { id: '1' } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(Number(res.body.id), 1);
+});
+
+test('GET /api/hydrants/:id 404s for a missing id', async () => {
+  const res = createMockRes();
+  await byIdHandler({ method: 'GET', query: { id: '999' } }, res);
   assert.equal(res.statusCode, 404);
 });
 
-test('GET /hydrants/:id 400s for a non-numeric id', async () => {
-  const res = await app.inject({ method: 'GET', url: '/hydrants/abc' });
+test('GET /api/hydrants/:id 400s for a non-numeric id', async () => {
+  const res = createMockRes();
+  await byIdHandler({ method: 'GET', query: { id: 'abc' } }, res);
   assert.equal(res.statusCode, 400);
 });
