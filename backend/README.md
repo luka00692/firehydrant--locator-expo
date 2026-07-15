@@ -27,17 +27,32 @@ against it before `npm run import`.
 
 ## Endpoints
 
+Hydrants:
 - `GET /api/health`
 - `GET /api/hydrants?minLat&minLon&maxLat&maxLon` — hydrants in a map viewport
 - `GET /api/hydrants/nearby?lat&lon&limit` — nearest hydrants to a point
 - `GET /api/hydrants/:id`
+
+Accounts / teams (`uporabnik`/`skupina`/`paket`/`clanstvo`/`vozilo` — see
+`schema.sql` for the full data model):
+- `GET|POST /api/uporabniki`, `GET /api/uporabniki/:id`
+- `GET|POST /api/skupine` (`POST` requires `lastnik_id`, `ime`, `lat`, `lon`;
+  `st_sedezev` optional), `GET /api/skupine/:id`
+- `GET|POST /api/paketi` (optional `?skupina_id=` filter on `GET`)
+- `GET|POST /api/clanstva` (optional `?skupina_id=`/`?uporabnik_id=` filters)
+- `GET|POST /api/vozila` (optional `?skupina_id=` filter on `GET`)
+
+All `POST` endpoints return `400` on missing fields or constraint violations
+(bad foreign key, invalid enum value, duplicate membership, etc.) instead of
+a raw `500` — see `lib/dbError.js`.
 
 ## Deploying to Vercel
 
 1. Create a [Neon](https://neon.tech) Postgres project, enable the `postgis`
    extension, and run `schema.sql` against it.
 2. Run `npm run import` once (locally, pointed at the Neon connection string)
-   to seed hydrant data.
+   to seed hydrant data, and `npm run seed` to fill the accounts/teams tables
+   with test data.
 3. Create a Vercel project from this repo with **Root Directory** set to
    `backend`.
 4. Set the `DATABASE_URL` environment variable in Vercel to Neon's **pooled**
