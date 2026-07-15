@@ -50,19 +50,6 @@ export function couplingsSummary(props) {
   return parts.length ? parts.join(' — ') : null;
 }
 
-export function findNearest(point, hydrants) {
-  let nearest = null;
-  let nearestDist = Infinity;
-  for (const hydrant of hydrants) {
-    const dist = haversineMeters(point, hydrant.coordinate);
-    if (dist < nearestDist) {
-      nearestDist = dist;
-      nearest = hydrant;
-    }
-  }
-  return nearest ? { hydrant: nearest, distance: nearestDist } : null;
-}
-
 export function detailCompleteness(props) {
   const hasDiameter = !!diameterSummary(props);
   const hasCouplings = !!couplingsSummary(props);

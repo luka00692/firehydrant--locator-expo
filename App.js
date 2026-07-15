@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
@@ -7,8 +7,8 @@ import CitySearchBar from './src/CitySearchBar';
 import HydrantInfoCard from './src/HydrantInfoCard';
 import Legend from './src/Legend';
 import cityData from './src/data/cities.json';
-import hydrantData from './src/data/slovenia.json';
-import { detailCompleteness, findNearest, typeCategory } from './src/hydrantUtils';
+import { fetchHydrantsInBounds, fetchNearestHydrant } from './src/api';
+import { detailCompleteness, typeCategory } from './src/hydrantUtils';
 import { fetchRoute } from './src/routing';
 import { colors, detailColor, typeMarkerColor } from './src/theme';
 
@@ -21,25 +21,36 @@ const SLOVENIA_REGION = {
 
 const CATEGORIZE_MODES = ['off', 'detail', 'type'];
 const CATEGORIZE_LABELS = { off: 'Categorize', detail: 'By detail', type: 'By type' };
+const REGION_FETCH_DEBOUNCE_MS = 400;
 
 function zoomToDelta(zoom) {
   return 360 / Math.pow(2, zoom);
 }
 
+function regionToBounds(region) {
+  return {
+    minLat: region.latitude - region.latitudeDelta / 2,
+    maxLat: region.latitude + region.latitudeDelta / 2,
+    minLon: region.longitude - region.longitudeDelta / 2,
+    maxLon: region.longitude + region.longitudeDelta / 2
+  };
+}
+
+function toHydrant(row) {
+  return {
+    id: row.id,
+    coordinate: { latitude: row.lat, longitude: row.lon },
+    properties: row.properties || {},
+    completeness: detailCompleteness(row.properties || {}),
+    type: typeCategory(row.properties || {})
+  };
+}
+
 export default function App() {
   const mapRef = useRef(null);
+  const regionFetchTimeout = useRef(null);
 
-  const hydrants = useMemo(
-    () =>
-      hydrantData.features.map((f) => ({
-        id: f.id,
-        coordinate: { latitude: f.geometry.coordinates[1], longitude: f.geometry.coordinates[0] },
-        properties: f.properties || {},
-        completeness: detailCompleteness(f.properties || {}),
-        type: typeCategory(f.properties || {})
-      })),
-    []
-  );
+  const [hydrants, setHydrants] = useState([]);
 
   const categoryCounts = useMemo(() => {
     const detail = { full: 0, partial: 0, none: 0 };
@@ -72,7 +83,27 @@ export default function App() {
   const [routeInfo, setRouteInfo] = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState(null);
-  const [statusMessage, setStatusMessage] = useState(`${hydrants.length} hydrants across Slovenia.`);
+  const [statusMessage, setStatusMessage] = useState('Loading hydrants…');
+
+  async function loadHydrants(region) {
+    try {
+      const rows = await fetchHydrantsInBounds(regionToBounds(region));
+      const loaded = rows.map(toHydrant);
+      setHydrants(loaded);
+      setStatusMessage(`${loaded.length} hydrants in view.`);
+    } catch (err) {
+      setStatusMessage('Could not reach the hydrant server.');
+    }
+  }
+
+  useEffect(() => {
+    loadHydrants(SLOVENIA_REGION);
+  }, []);
+
+  function handleRegionChangeComplete(region) {
+    clearTimeout(regionFetchTimeout.current);
+    regionFetchTimeout.current = setTimeout(() => loadHydrants(region), REGION_FETCH_DEBOUNCE_MS);
+  }
 
   function fitTo(coordsArray) {
     mapRef.current?.fitToCoordinates(coordsArray, {
@@ -120,15 +151,18 @@ export default function App() {
     setLocating(true);
     setStatusMessage('Finding your location…');
     const here = await ensureLocation();
-    setLocating(false);
-    if (!here) return;
-
-    const nearest = findNearest(here, hydrants);
-    if (!nearest) {
-      setStatusMessage('Located you. Hydrant data not loaded.');
+    if (!here) {
+      setLocating(false);
       return;
     }
-    routeFromHereToHydrant(here, nearest.hydrant, 'Nearest hydrant');
+
+    const row = await fetchNearestHydrant(here).catch(() => null);
+    setLocating(false);
+    if (!row) {
+      setStatusMessage('Located you. Could not reach the hydrant server.');
+      return;
+    }
+    routeFromHereToHydrant(here, toHydrant(row), 'Nearest hydrant');
   }
 
   async function handleMarkerPress(hydrant) {
@@ -142,15 +176,15 @@ export default function App() {
     routeFromHereToHydrant(here, hydrant, 'This hydrant');
   }
 
-  function handleMapPress(e) {
+  async function handleMapPress(e) {
     const point = e.nativeEvent.coordinate;
-    const nearest = findNearest(point, hydrants);
-    if (!nearest) {
-      setStatusMessage('No hydrant data loaded yet.');
+    const row = await fetchNearestHydrant(point).catch(() => null);
+    if (!row) {
+      setStatusMessage('Could not reach the hydrant server.');
       return;
     }
     setQueryPoint(point);
-    routeFromHereToHydrant(point, nearest.hydrant, 'Nearest hydrant to that point');
+    routeFromHereToHydrant(point, toHydrant(row), 'Nearest hydrant to that point');
   }
 
   function handleCategorizeToggle() {
@@ -219,6 +253,7 @@ export default function App() {
           }
         }}
         onPress={handleMapPress}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
         {hydrants.map((h) => (
           <Marker
