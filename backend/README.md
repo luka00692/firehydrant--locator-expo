@@ -128,8 +128,11 @@ but an actual live checkout has not been run end-to-end.
 exact wording for this one endpoint). Takes the 5 nearest-as-crow-flies
 hydrants (optionally filtered to an exact `fire_hydrant:diameter` match for
 `premer`), road-routes each via OSRM (`lib/routing.js`), and returns whichever
-is actually closest by road. Falls back to the closest straight-line
-candidate if OSRM is unreachable. Not reachable from this sandbox either
+is actually closest by road as `{ hydrant, route: { distance, duration,
+coordinates } }` — `route.coordinates` (`[lat, lon][]`) is only fetched once,
+for the winning candidate, so it's cheap to draw the path on a map. Falls
+back to the closest straight-line candidate (`route: null`) if OSRM is
+unreachable. Not reachable from this sandbox either
 (outbound network to `router.project-osrm.org` is blocked here) — implemented
 per the existing client-side `src/routing.js` pattern but not live-tested.
 

@@ -1,13 +1,14 @@
 const { getPool } = require('../../lib/db');
 const { applyCors } = require('../../lib/cors');
-const { fetchRoadRoute } = require('../../lib/routing');
+const { fetchRoadRoute, fetchRoadRouteWithGeometry } = require('../../lib/routing');
 
 const CANDIDATE_LIMIT = 5;
 
 // Takes the N nearest-as-crow-flies hydrants (optionally filtered by an exact
 // fire_hydrant:diameter match for the selected vehicle's hose), road-routes
 // each via OSRM, and returns whichever is actually closest by road — not
-// just closest in a straight line.
+// just closest in a straight line. Route geometry (for drawing the path) is
+// only fetched once, for the winning candidate.
 module.exports = async function handler(req, res) {
   applyCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -52,7 +53,14 @@ module.exports = async function handler(req, res) {
 
   // Road routing unavailable for every candidate — fall back to the closest
   // straight-line match instead of failing the whole request.
-  if (!best) best = { hydrant: candidates[0], route: null };
+  if (!best) return res.status(200).json({ hydrant: candidates[0], route: null });
+
+  try {
+    const withGeometry = await fetchRoadRouteWithGeometry(from, { lat: best.hydrant.lat, lon: best.hydrant.lon });
+    if (withGeometry) best.route = withGeometry;
+  } catch {
+    // keep the distance/duration we already have, just without a line to draw
+  }
 
   res.status(200).json(best);
 };
