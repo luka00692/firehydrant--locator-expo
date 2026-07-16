@@ -1,13 +1,14 @@
 import * as Location from 'expo-location';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import { MapView, Marker, Polyline } from './src/Map';
 
 import CitySearchBar from './src/CitySearchBar';
 import HydrantInfoCard from './src/HydrantInfoCard';
 import Legend from './src/Legend';
 import cityData from './src/data/cities.json';
 import { fetchHydrantsInBounds, fetchNearestHydrant } from './src/api';
+import { GOOGLE_MAPS_API_KEY } from './src/config';
 import { detailCompleteness, typeCategory } from './src/hydrantUtils';
 import { fetchRoute } from './src/routing';
 import { colors, detailColor, typeMarkerColor } from './src/theme';
@@ -243,6 +244,7 @@ export default function App() {
         ref={mapRef}
         style={styles.map}
         initialRegion={SLOVENIA_REGION}
+        googleMapsApiKey={GOOGLE_MAPS_API_KEY}
         showsUserLocation={locationEnabled}
         onUserLocationChange={(e) => {
           if (e.nativeEvent.coordinate) {
