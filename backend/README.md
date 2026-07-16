@@ -200,7 +200,7 @@ The web build needs a Google Maps API key — set
 
 ## TODO — open for anyone to pick up
 
-- [x] Provision the Neon project and complete the Vercel deployment above. **Done** (2026-07-16): Neon DB provisioned, schema applied, hydrants imported, test data seeded. Backend deployed to https://firehydrant-locator-backend.vercel.app, web to https://ph-slo.vercel.app.
+- [x] Provision the Neon project and complete the Vercel deployment above. **Done** (2026-07-16): Neon DB provisioned, schema applied, hydrants imported, test data seeded. Backend deployed to https://ph-slo-api.vercel.app, web to https://ph-slo.vercel.app (the `ph-slo` project was renamed to `ph-slo-api` to free up the bare domain for the web frontend).
 - [ ] **Consolidate API routes.** The Hobby plan caps a deployment at 12 serverless functions but `api/` has 20 route files, so the current production deploy excludes `checkout`, `webhooks/stripe`, `cron/resync`, `geocode`, `groups/[id]/requests`, `groups/[id]/vehicles`, `memberships/[id]`, and `vehicles/[id]` via `.vercelignore` (and `vercel.json`'s `crons` array is emptied since it pointed at the excluded resync route). Either merge several routes into fewer files (e.g. one handler per resource dispatching on `req.method`/sub-path) or upgrade the Vercel account to Pro, then remove `.vercelignore` and restore the crons entry.
 - [ ] Real Google/Apple sign-in (needs registering OAuth apps + client
       credentials) and/or a magic-link email step for the "email" method
