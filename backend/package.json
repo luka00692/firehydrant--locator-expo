@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "import": "node scripts/importHydrants.js"
+    "import": "node scripts/importHydrants.js",
+    "seed": "node scripts/importHydrants.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
