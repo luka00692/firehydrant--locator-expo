@@ -4,7 +4,7 @@ async function seedTestData(pool) {
   const users = [
     { id: crypto.randomUUID(), email: 'ana.novak@example.com', uporabnisko_ime: 'ana.novak', nacin_prijave: 'email' },
     { id: crypto.randomUUID(), email: 'marko.kovac@example.com', uporabnisko_ime: 'marko.kovac', nacin_prijave: 'google' },
-    { id: crypto.randomUUID(), email: 'petra.zupan@example.com', uporabnisko_ime: 'petra.zupan', nacin_prijave: 'github' }
+    { id: crypto.randomUUID(), email: 'petra.zupan@example.com', uporabnisko_ime: 'petra.zupan', nacin_prijave: 'apple' }
   ];
   for (const u of users) {
     await pool.query(
