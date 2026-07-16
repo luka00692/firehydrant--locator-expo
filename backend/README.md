@@ -57,6 +57,8 @@ Groups / teams (auth required on all of these; `vloga` is `"admin"` or
   request / `GET /api/groups/join?imeSkupine=` — the caller polls their own
   request's status (`pending`/`approved`/`rejected`), `404` if none exists
 - `GET /api/groups/:id/requests` — admin-only, lists pending join requests
+- `GET /api/groups/:id/members` — any approved member can list the group's
+  approved members
 - `GET|POST /api/groups/:id/vehicles` — any approved member can list, only an
   admin can add (body `{ ime, premerCevi }`)
 - `PATCH /api/memberships/:id` — admin-only, body `{ status: "approved" }` to

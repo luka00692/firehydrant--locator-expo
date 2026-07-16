@@ -16,6 +16,7 @@ const groupsHandler = require('../api/groups/index');
 const groupJoinHandler = require('../api/groups/join');
 const groupByIdHandler = require('../api/groups/[id]/index');
 const groupRequestsHandler = require('../api/groups/[id]/requests');
+const groupMembersHandler = require('../api/groups/[id]/members');
 const groupVehiclesHandler = require('../api/groups/[id]/vehicles');
 const membershipHandler = require('../api/memberships/[id]');
 const vehicleByIdHandler = require('../api/vehicles/[id]');
@@ -273,6 +274,28 @@ test('GET /api/groups/join lets the caller poll their own request status', async
   await groupJoinHandler(authedReq(guestToken, { method: 'GET', query: { imeSkupine: group.ime } }), pollApprovedRes);
   assert.equal(pollApprovedRes.statusCode, 200);
   assert.equal(pollApprovedRes.body.status, 'approved');
+});
+
+test('GET /api/groups/:id/members lists only approved members, visible to any member', async () => {
+  const { ownerToken, group } = await createGroup('memberslist@example.com', 'memberslist', 3);
+  const { token: memberToken } = await registerUser('memberslist-m@example.com', 'memberslist-m');
+  const { token: strangerToken } = await registerUser('memberslist-x@example.com', 'memberslist-x');
+
+  const joinRes = createMockRes();
+  await groupJoinHandler(authedReq(memberToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
+  await membershipHandler(
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'approved' } }),
+    createMockRes()
+  );
+
+  const membersRes = createMockRes();
+  await groupMembersHandler(authedReq(memberToken, { method: 'GET', query: { id: group.id } }), membersRes);
+  assert.equal(membersRes.statusCode, 200);
+  assert.equal(membersRes.body.length, 2);
+
+  const forbiddenRes = createMockRes();
+  await groupMembersHandler(authedReq(strangerToken, { method: 'GET', query: { id: group.id } }), forbiddenRes);
+  assert.equal(forbiddenRes.statusCode, 403);
 });
 
 test('Admin can promote a member to admin', async () => {
