@@ -76,26 +76,30 @@ test('GET /api/auth/session 401s without a token', async () => {
 test('POST /api/groups requires a purchased package', async () => {
   const { token } = await registerUser('nopackage@example.com', 'nopackage');
   const res = createMockRes();
-  await groupsHandler(authedReq(token, { method: 'POST', body: { ime: 'PGD Test' } }), res);
+  await groupsHandler(authedReq(token, { method: 'POST', body: { imeSkupine: 'PGD Test' } }), res);
   assert.equal(res.statusCode, 402);
 });
 
-test('POST /api/groups creates a group and consumes the package', async () => {
+test('POST /api/groups creates a group (as admin) and consumes the package', async () => {
   const { user, token } = await registerUser('buyer@example.com', 'buyer');
   await grantPackage(user.id, 5);
 
   const res = createMockRes();
-  await groupsHandler(authedReq(token, { method: 'POST', body: { ime: 'PGD Test' } }), res);
+  await groupsHandler(authedReq(token, { method: 'POST', body: { imeSkupine: 'PGD Test' } }), res);
   assert.equal(res.statusCode, 201);
   assert.equal(res.body.ime, 'PGD Test');
-  assert.equal(res.body.st_sedezev, 5);
+  assert.equal(res.body.stSedezev, 5);
 
   const { rows } = await pool.query(`SELECT skupina_id FROM paket WHERE kupec_id = $1`, [user.id]);
   assert.equal(rows[0].skupina_id, res.body.id);
 
+  const { rows: membershipRows } = await pool.query(`SELECT vloga, status FROM clanstvo WHERE uporabnik_id = $1`, [user.id]);
+  assert.equal(membershipRows[0].vloga, 'admin');
+  assert.equal(membershipRows[0].status, 'approved');
+
   // A second group creation now fails — the one package was already consumed.
   const secondRes = createMockRes();
-  await groupsHandler(authedReq(token, { method: 'POST', body: { ime: 'PGD Drugo' } }), secondRes);
+  await groupsHandler(authedReq(token, { method: 'POST', body: { imeSkupine: 'PGD Drugo' } }), secondRes);
   assert.equal(secondRes.statusCode, 402);
 });
 
@@ -103,7 +107,7 @@ test('GET /api/groups lists only the caller\'s groups', async () => {
   const { user: owner, token: ownerToken } = await registerUser('owner2@example.com', 'owner2');
   await grantPackage(owner.id, 3);
   const createRes = createMockRes();
-  await groupsHandler(authedReq(ownerToken, { method: 'POST', body: { ime: 'PGD Owner2' } }), createRes);
+  await groupsHandler(authedReq(ownerToken, { method: 'POST', body: { imeSkupine: 'PGD Owner2' } }), createRes);
 
   const { token: otherToken } = await registerUser('outsider@example.com', 'outsider');
 
@@ -120,23 +124,28 @@ async function createGroup(email, uporabnisko_ime, seats = 5) {
   const { user, token } = await registerUser(email, uporabnisko_ime);
   await grantPackage(user.id, seats);
   const res = createMockRes();
-  await groupsHandler(authedReq(token, { method: 'POST', body: { ime: `Skupina ${email}` } }), res);
+  await groupsHandler(authedReq(token, { method: 'POST', body: { imeSkupine: `Skupina ${email}` } }), res);
   return { owner: user, ownerToken: token, group: res.body };
 }
 
-test('PATCH /api/groups/:id lets the owner rename and set a home location', async () => {
+test('PATCH /api/groups/:id lets the admin rename and set a home location', async () => {
   const { ownerToken, group } = await createGroup('rename-owner@example.com', 'rename-owner');
   const res = createMockRes();
   await groupByIdHandler(
-    authedReq(ownerToken, { method: 'PATCH', query: { id: group.id }, body: { ime: 'Novo ime', lat: 46.05, lon: 14.5 } }),
+    authedReq(ownerToken, {
+      method: 'PATCH',
+      query: { id: group.id },
+      body: { ime: 'Novo ime', lokacijaDoma: { lat: 46.05, lng: 14.5 } }
+    }),
     res
   );
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.ime, 'Novo ime');
   assert.ok(Math.abs(Number(res.body.lat) - 46.05) < 0.001);
+  assert.ok(Math.abs(Number(res.body.lng) - 14.5) < 0.001);
 });
 
-test('PATCH /api/groups/:id is forbidden for a non-owner', async () => {
+test('PATCH /api/groups/:id is forbidden for a non-admin', async () => {
   const { group } = await createGroup('owner3@example.com', 'owner3');
   const { token: strangerToken } = await registerUser('stranger@example.com', 'stranger');
 
@@ -145,55 +154,72 @@ test('PATCH /api/groups/:id is forbidden for a non-owner', async () => {
   assert.equal(res.statusCode, 403);
 });
 
-test('Guest join request → owner sees it → accept succeeds when a seat is free', async () => {
+test('Guest join request → admin sees it → approve succeeds only when a seat is free', async () => {
   const { ownerToken, group } = await createGroup('joinowner@example.com', 'joinowner', 1);
   const { user: guest, token: guestToken } = await registerUser('guest@example.com', 'guest');
 
   const joinRes = createMockRes();
-  await groupJoinHandler(authedReq(guestToken, { method: 'POST', body: { ime: group.ime } }), joinRes);
+  await groupJoinHandler(authedReq(guestToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
   assert.equal(joinRes.statusCode, 201);
-  assert.equal(joinRes.body.status, 'povabljen');
+  assert.equal(joinRes.body.status, 'pending');
+  assert.equal(joinRes.body.vloga, 'member');
 
   const requestsRes = createMockRes();
   await groupRequestsHandler(authedReq(ownerToken, { method: 'GET', query: { id: group.id } }), requestsRes);
   assert.equal(requestsRes.body.length, 1);
-  assert.equal(requestsRes.body[0].uporabnik_id, guest.id);
+  assert.equal(requestsRes.body[0].uporabnikId, guest.id);
 
-  // The group only has 1 seat and the owner already occupies it.
-  const acceptRes = createMockRes();
+  // The group only has 1 seat and the admin already occupies it.
+  const approveRes = createMockRes();
   await membershipHandler(
-    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'aktiven' } }),
-    acceptRes
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'approved' } }),
+    approveRes
   );
-  assert.equal(acceptRes.statusCode, 409);
+  assert.equal(approveRes.statusCode, 409);
 });
 
-test('Guest join request accepted when a seat is available', async () => {
+test('Guest join request approved when a seat is available', async () => {
   const { ownerToken, group } = await createGroup('joinowner2@example.com', 'joinowner2', 2);
   const { token: guestToken } = await registerUser('guest2@example.com', 'guest2');
 
   const joinRes = createMockRes();
-  await groupJoinHandler(authedReq(guestToken, { method: 'POST', body: { ime: group.ime } }), joinRes);
+  await groupJoinHandler(authedReq(guestToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
 
-  const acceptRes = createMockRes();
+  const approveRes = createMockRes();
   await membershipHandler(
-    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'aktiven' } }),
-    acceptRes
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'approved' } }),
+    approveRes
   );
-  assert.equal(acceptRes.statusCode, 200);
-  assert.equal(acceptRes.body.status, 'aktiven');
+  assert.equal(approveRes.statusCode, 200);
+  assert.equal(approveRes.body.status, 'approved');
 });
 
-test('Owner rejecting a pending join request deletes it', async () => {
+test('Admin can reject a pending join request via PATCH', async () => {
   const { ownerToken, group } = await createGroup('joinowner3@example.com', 'joinowner3', 2);
   const { token: guestToken } = await registerUser('guest3@example.com', 'guest3');
 
   const joinRes = createMockRes();
-  await groupJoinHandler(authedReq(guestToken, { method: 'POST', body: { ime: group.ime } }), joinRes);
+  await groupJoinHandler(authedReq(guestToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
 
   const rejectRes = createMockRes();
-  await membershipHandler(authedReq(ownerToken, { method: 'DELETE', query: { id: joinRes.body.id } }), rejectRes);
-  assert.equal(rejectRes.statusCode, 204);
+  await membershipHandler(
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'rejected' } }),
+    rejectRes
+  );
+  assert.equal(rejectRes.statusCode, 200);
+  assert.equal(rejectRes.body.status, 'rejected');
+});
+
+test('Admin can also reject/remove via DELETE', async () => {
+  const { ownerToken, group } = await createGroup('joinowner3b@example.com', 'joinowner3b', 2);
+  const { token: guestToken } = await registerUser('guest3b@example.com', 'guest3b');
+
+  const joinRes = createMockRes();
+  await groupJoinHandler(authedReq(guestToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
+
+  const deleteRes = createMockRes();
+  await membershipHandler(authedReq(ownerToken, { method: 'DELETE', query: { id: joinRes.body.id } }), deleteRes);
+  assert.equal(deleteRes.statusCode, 204);
 
   const { rows } = await pool.query(`SELECT * FROM clanstvo WHERE id = $1`, [joinRes.body.id]);
   assert.equal(rows.length, 0);
@@ -204,44 +230,65 @@ test('A member cannot approve or remove other members', async () => {
   const { token: memberToken } = await registerUser('member4@example.com', 'member4');
 
   const joinRes = createMockRes();
-  await groupJoinHandler(authedReq(memberToken, { method: 'POST', body: { ime: group.ime } }), joinRes);
+  await groupJoinHandler(authedReq(memberToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
   await membershipHandler(
-    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'aktiven' } }),
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'approved' } }),
     createMockRes()
   );
 
   const { token: otherGuestToken } = await registerUser('guest4@example.com', 'guest4');
   const otherJoinRes = createMockRes();
-  await groupJoinHandler(authedReq(otherGuestToken, { method: 'POST', body: { ime: group.ime } }), otherJoinRes);
+  await groupJoinHandler(authedReq(otherGuestToken, { method: 'POST', body: { imeSkupine: group.ime } }), otherJoinRes);
 
   const forbiddenRes = createMockRes();
   await membershipHandler(
-    authedReq(memberToken, { method: 'PATCH', query: { id: otherJoinRes.body.id }, body: { status: 'aktiven' } }),
+    authedReq(memberToken, { method: 'PATCH', query: { id: otherJoinRes.body.id }, body: { status: 'approved' } }),
     forbiddenRes
   );
   assert.equal(forbiddenRes.statusCode, 403);
 });
 
-test('Owner can add, list, and remove vehicles; members can only list', async () => {
+test('Admin can promote a member to admin', async () => {
+  const { ownerToken, group } = await createGroup('promote@example.com', 'promote', 3);
+  const { token: memberToken } = await registerUser('promoted-member@example.com', 'promoted-member');
+
+  const joinRes = createMockRes();
+  await groupJoinHandler(authedReq(memberToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
+  await membershipHandler(
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'approved' } }),
+    createMockRes()
+  );
+
+  const promoteRes = createMockRes();
+  await membershipHandler(
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { vloga: 'admin' } }),
+    promoteRes
+  );
+  assert.equal(promoteRes.statusCode, 200);
+  assert.equal(promoteRes.body.vloga, 'admin');
+});
+
+test('Admin can add, list, update, and remove vehicles; members can only list', async () => {
   const { ownerToken, group } = await createGroup('vehowner@example.com', 'vehowner');
   const { token: memberToken } = await registerUser('vehmember@example.com', 'vehmember');
   const joinRes = createMockRes();
-  await groupJoinHandler(authedReq(memberToken, { method: 'POST', body: { ime: group.ime } }), joinRes);
+  await groupJoinHandler(authedReq(memberToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
   await membershipHandler(
-    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'aktiven' } }),
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'approved' } }),
     createMockRes()
   );
 
   const addRes = createMockRes();
   await groupVehiclesHandler(
-    authedReq(ownerToken, { method: 'POST', query: { id: group.id }, body: { ime: 'GVC 16/15', premer_cevi: 75 } }),
+    authedReq(ownerToken, { method: 'POST', query: { id: group.id }, body: { ime: 'GVC 16/15', premerCevi: 75 } }),
     addRes
   );
   assert.equal(addRes.statusCode, 201);
+  assert.equal(Number(addRes.body.premerCevi), 75);
 
   const memberAddRes = createMockRes();
   await groupVehiclesHandler(
-    authedReq(memberToken, { method: 'POST', query: { id: group.id }, body: { ime: 'Hack Truck', premer_cevi: 1 } }),
+    authedReq(memberToken, { method: 'POST', query: { id: group.id }, body: { ime: 'Hack Truck', premerCevi: 1 } }),
     memberAddRes
   );
   assert.equal(memberAddRes.statusCode, 403);
@@ -250,6 +297,14 @@ test('Owner can add, list, and remove vehicles; members can only list', async ()
   await groupVehiclesHandler(authedReq(memberToken, { method: 'GET', query: { id: group.id } }), memberListRes);
   assert.equal(memberListRes.statusCode, 200);
   assert.equal(memberListRes.body.length, 1);
+
+  const updateRes = createMockRes();
+  await vehicleByIdHandler(
+    authedReq(ownerToken, { method: 'PATCH', query: { id: addRes.body.id }, body: { premerCevi: 110 } }),
+    updateRes
+  );
+  assert.equal(updateRes.statusCode, 200);
+  assert.equal(Number(updateRes.body.premerCevi), 110);
 
   const removeRes = createMockRes();
   await vehicleByIdHandler(authedReq(ownerToken, { method: 'DELETE', query: { id: addRes.body.id } }), removeRes);

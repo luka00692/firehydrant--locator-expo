@@ -3,8 +3,8 @@ const { applyCors } = require('../../lib/cors');
 const { respondIfDbError } = require('../../lib/dbError');
 const { requireAuth } = require('../../lib/auth');
 
-const SELECT_FIELDS = `id, lastnik_id, ime, st_sedezev, created_at,
-  ST_Y(lokacija_doma::geometry) AS lat, ST_X(lokacija_doma::geometry) AS lon`;
+const SELECT_FIELDS = `id, lastnik_id AS "lastnikId", ime, st_sedezev AS "stSedezev", created_at AS "createdAt",
+  ST_Y(lokacija_doma::geometry) AS lat, ST_X(lokacija_doma::geometry) AS lng`;
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -16,8 +16,8 @@ module.exports = async function handler(req, res) {
   const pool = getPool();
 
   if (req.method === 'POST') {
-    const { ime } = req.body || {};
-    if (!ime) return res.status(400).json({ error: 'ime is required' });
+    const { imeSkupine } = req.body || {};
+    if (!imeSkupine) return res.status(400).json({ error: 'imeSkupine is required' });
 
     const client = await pool.connect();
     try {
@@ -37,13 +37,13 @@ module.exports = async function handler(req, res) {
 
       const { rows: groupRows } = await client.query(
         `INSERT INTO skupina (lastnik_id, ime, st_sedezev) VALUES ($1, $2, $3) RETURNING ${SELECT_FIELDS}`,
-        [user.id, ime, paket.st_sedezev]
+        [user.id, imeSkupine, paket.st_sedezev]
       );
       const group = groupRows[0];
 
       await client.query(`UPDATE paket SET skupina_id = $1 WHERE id = $2`, [group.id, paket.id]);
       await client.query(
-        `INSERT INTO clanstvo (uporabnik_id, skupina_id, vloga, status) VALUES ($1, $2, 'lastnik', 'aktiven')`,
+        `INSERT INTO clanstvo (uporabnik_id, skupina_id, vloga, status) VALUES ($1, $2, 'admin', 'approved')`,
         [user.id, group.id]
       );
 
@@ -58,14 +58,14 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // GET — groups the caller is an active member of.
+  // GET — groups the caller has an approved membership in.
   const { rows } = await pool.query(
-    `SELECT s.id, s.lastnik_id, s.ime, s.st_sedezev, s.created_at,
-            ST_Y(s.lokacija_doma::geometry) AS lat, ST_X(s.lokacija_doma::geometry) AS lon,
+    `SELECT s.id, s.lastnik_id AS "lastnikId", s.ime, s.st_sedezev AS "stSedezev", s.created_at AS "createdAt",
+            ST_Y(s.lokacija_doma::geometry) AS lat, ST_X(s.lokacija_doma::geometry) AS lng,
             c.vloga
      FROM skupina s
      JOIN clanstvo c ON c.skupina_id = s.id
-     WHERE c.uporabnik_id = $1 AND c.status = 'aktiven'
+     WHERE c.uporabnik_id = $1 AND c.status = 'approved'
      ORDER BY s.created_at DESC`,
     [user.id]
   );

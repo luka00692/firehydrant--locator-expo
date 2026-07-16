@@ -5,23 +5,23 @@ const { fetchRoadRoute } = require('../../lib/routing');
 const CANDIDATE_LIMIT = 5;
 
 // Takes the N nearest-as-crow-flies hydrants (optionally filtered by an exact
-// fire_hydrant:diameter match for the selected vehicle), road-routes each via
-// OSRM, and returns whichever is actually closest by road — not just closest
-// in a straight line.
+// fire_hydrant:diameter match for the selected vehicle's hose), road-routes
+// each via OSRM, and returns whichever is actually closest by road — not
+// just closest in a straight line.
 module.exports = async function handler(req, res) {
   applyCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
 
-  const { lat, lon, premer_cevi } = req.body || {};
-  if (lat === undefined || lon === undefined) {
-    return res.status(400).json({ error: 'lat and lon are required' });
+  const { lat, lng, premer } = req.body || {};
+  if (lat === undefined || lng === undefined) {
+    return res.status(400).json({ error: 'lat and lng are required' });
   }
 
-  const params = [Number(lat), Number(lon)];
+  const params = [Number(lat), Number(lng)];
   let diameterFilter = '';
-  if (premer_cevi !== undefined) {
-    params.push(String(premer_cevi));
+  if (premer !== undefined) {
+    params.push(String(premer));
     diameterFilter = `AND properties->>'fire_hydrant:diameter' = $${params.length}`;
   }
   params.push(CANDIDATE_LIMIT);
@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
 
   if (!candidates.length) return res.status(404).json({ error: 'no matching hydrant found' });
 
-  const from = { lat: Number(lat), lon: Number(lon) };
+  const from = { lat: Number(lat), lon: Number(lng) };
   let best = null;
   for (const candidate of candidates) {
     try {

@@ -76,8 +76,8 @@ CREATE TABLE IF NOT EXISTS clanstvo (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   uporabnik_id UUID NOT NULL REFERENCES uporabnik(id) ON DELETE CASCADE,
   skupina_id UUID NOT NULL REFERENCES skupina(id) ON DELETE CASCADE,
-  vloga TEXT NOT NULL CHECK (vloga IN ('lastnik', 'clan', 'gost')),
-  status TEXT NOT NULL CHECK (status IN ('povabljen', 'aktiven', 'zapustil')),
+  vloga TEXT NOT NULL CHECK (vloga IN ('admin', 'member')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (uporabnik_id, skupina_id)
 );

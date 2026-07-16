@@ -4,8 +4,11 @@ const { respondIfDbError } = require('../../lib/dbError');
 const { requireAuth } = require('../../lib/auth');
 const { sendPushNotification } = require('../../lib/push');
 
+const MEMBERSHIP_FIELDS = `id, uporabnik_id AS "uporabnikId", skupina_id AS "skupinaId", vloga, status,
+  created_at AS "createdAt"`;
+
 // A guest requests to join a group by name. The membership row lands in
-// 'povabljen' (pending) — the group's admin approves/rejects it via
+// 'pending' — the group's admin approves/rejects it via
 // PATCH/DELETE /api/memberships/:id.
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -15,24 +18,25 @@ module.exports = async function handler(req, res) {
   const user = await requireAuth(req, res);
   if (!user) return;
 
-  const { ime } = req.body || {};
-  if (!ime) return res.status(400).json({ error: 'ime (group name) is required' });
+  const { imeSkupine } = req.body || {};
+  if (!imeSkupine) return res.status(400).json({ error: 'imeSkupine is required' });
 
   const pool = getPool();
-  const { rows: groups } = await pool.query(`SELECT * FROM skupina WHERE ime = $1`, [ime]);
+  const { rows: groups } = await pool.query(`SELECT * FROM skupina WHERE ime = $1`, [imeSkupine]);
   const group = groups[0];
   if (!group) return res.status(404).json({ error: 'group not found' });
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO clanstvo (uporabnik_id, skupina_id, vloga, status) VALUES ($1, $2, 'clan', 'povabljen') RETURNING *`,
+      `INSERT INTO clanstvo (uporabnik_id, skupina_id, vloga, status)
+       VALUES ($1, $2, 'member', 'pending') RETURNING ${MEMBERSHIP_FIELDS}`,
       [user.id, group.id]
     );
 
     const { rows: owners } = await pool.query(
       `SELECT u.push_token FROM uporabnik u
        JOIN clanstvo c ON c.uporabnik_id = u.id
-       WHERE c.skupina_id = $1 AND c.vloga = 'lastnik' AND c.status = 'aktiven'`,
+       WHERE c.skupina_id = $1 AND c.vloga = 'admin' AND c.status = 'approved'`,
       [group.id]
     );
     await Promise.all(
@@ -41,7 +45,7 @@ module.exports = async function handler(req, res) {
           owner.push_token,
           'Nova prošnja za pridružitev',
           `${user.uporabnisko_ime} želi pridružiti skupini ${group.ime}.`,
-          { skupina_id: group.id }
+          { skupinaId: group.id }
         )
       )
     );

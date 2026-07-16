@@ -40,10 +40,10 @@ async function seedTestData(pool) {
   }
 
   const memberships = [
-    { id: crypto.randomUUID(), uporabnik_id: users[0].id, skupina_id: groups[0].id, vloga: 'lastnik', status: 'aktiven' },
-    { id: crypto.randomUUID(), uporabnik_id: users[2].id, skupina_id: groups[0].id, vloga: 'clan', status: 'aktiven' },
-    { id: crypto.randomUUID(), uporabnik_id: users[1].id, skupina_id: groups[1].id, vloga: 'lastnik', status: 'aktiven' },
-    { id: crypto.randomUUID(), uporabnik_id: users[2].id, skupina_id: groups[1].id, vloga: 'clan', status: 'povabljen' }
+    { id: crypto.randomUUID(), uporabnik_id: users[0].id, skupina_id: groups[0].id, vloga: 'admin', status: 'approved' },
+    { id: crypto.randomUUID(), uporabnik_id: users[2].id, skupina_id: groups[0].id, vloga: 'member', status: 'approved' },
+    { id: crypto.randomUUID(), uporabnik_id: users[1].id, skupina_id: groups[1].id, vloga: 'admin', status: 'approved' },
+    { id: crypto.randomUUID(), uporabnik_id: users[2].id, skupina_id: groups[1].id, vloga: 'member', status: 'pending' }
   ];
   for (const m of memberships) {
     await pool.query(

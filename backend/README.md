@@ -45,32 +45,46 @@ Payments (see [Payments](#payments) below):
 - `POST /api/webhooks/stripe` — Stripe calls this; records the purchased
   `paket` on `checkout.session.completed`
 
-Groups / teams (auth required on all of these):
-- `POST /api/groups` (body `{ ime }`, consumes the caller's oldest unassigned
-  `paket`) / `GET /api/groups` (groups the caller belongs to)
-- `GET /api/groups/:id` / `PATCH /api/groups/:id` (owner-only; body
-  `{ ime?, lat?, lon? }`) / `DELETE /api/groups/:id` (owner-only)
-- `POST /api/groups/join` — body `{ ime }` (group name) → pending membership
+Groups / teams (auth required on all of these; `vloga` is `"admin"` or
+`"member"`, `status` is `"pending"`, `"approved"`, or `"rejected"`):
+- `POST /api/groups` — body `{ imeSkupine }`, consumes the caller's oldest
+  unassigned `paket` and makes the caller `admin` / `GET /api/groups` (groups
+  the caller belongs to)
+- `GET /api/groups/:id` / `PATCH /api/groups/:id` — admin-only; body
+  `{ ime?, lokacijaDoma?: { lat, lng } }` / `DELETE /api/groups/:id` — admin-only
+- `POST /api/groups/join` — body `{ imeSkupine }` → pending (`member`) join
   request
-- `GET /api/groups/:id/requests` — owner-only, lists pending join requests
-- `GET|POST /api/groups/:id/vehicles` — any active member can list, only the
-  owner can add (body `{ ime, premer_cevi }`)
-- `PATCH /api/memberships/:id` — owner-only, body `{ status: "aktiven" }` to
-  accept a pending request (409 if the group has no free seat), or
-  `{ vloga }` to change a member's role
-- `DELETE /api/memberships/:id` — owner-only; removes an active member or
-  rejects a pending request
-- `DELETE /api/vehicles/:id` — owner-only
+- `GET /api/groups/:id/requests` — admin-only, lists pending join requests
+- `GET|POST /api/groups/:id/vehicles` — any approved member can list, only an
+  admin can add (body `{ ime, premerCevi }`)
+- `PATCH /api/memberships/:id` — admin-only, body `{ status: "approved" }` to
+  accept a pending request (`409` if the group has no free seat),
+  `{ status: "rejected" }` to reject one, or `{ vloga: "admin"|"member" }` to
+  change a member's role
+- `DELETE /api/memberships/:id` — admin-only; removes an approved member or
+  rejects a pending request (an alternative to `PATCH { status: "rejected" }`)
+- `PATCH /api/vehicles/:id` — admin-only, body `{ ime?, premerCevi? }`
+- `DELETE /api/vehicles/:id` — admin-only
 
 Misc:
 - `GET /api/geocode?q=<address>` — address → `{ lat, lon }` (Nominatim,
   Slovenia-scoped)
+- `POST /api/hydrants/nearest` — see
+  [Nearest-hydrant search](#nearest-hydrant-search) below
 
 All `POST`/`PATCH` endpoints return `400` on missing fields or constraint
 violations (bad foreign key, invalid enum value, duplicate membership, etc.)
 instead of a raw `500` — see `lib/dbError.js`. All the group/membership/vehicle
-endpoints enforce that only a group's owner (`clanstvo.vloga = 'lastnik'`) can
+endpoints enforce that only a group's admin (`clanstvo.vloga = 'admin'`) can
 change its settings — a member can search/navigate but not administer.
+
+Response bodies use camelCase (`stSedezev`, `lastnikId`, `premerCevi`,
+`createdAt`, `uporabnikId`, `skupinaId`, `uporabniskoIme`, `lng`) even where
+the underlying Slovenian column name differs — see the `SELECT`/`RETURNING`
+aliases in each handler for the exact shape. Group/membership/vehicle field
+*names* that are meaningful nouns stay Slovenian (`ime`, `vloga`, `imeSkupine`,
+`premerCevi`, `lokacijaDoma`) to match the workflow spec exactly; only their
+*casing* and enum *values* are normalized to camelCase/English.
 
 ## Auth
 
@@ -105,14 +119,15 @@ but an actual live checkout has not been run end-to-end.
 
 ## Nearest-hydrant search
 
-`POST /api/hydrants/nearest` — body `{ lat, lon, premer_cevi? }`. Takes the 5
-nearest-as-crow-flies hydrants (optionally filtered to an exact
-`fire_hydrant:diameter` match for `premer_cevi`), road-routes each via OSRM
-(`lib/routing.js`), and returns whichever is actually closest by road. Falls
-back to the closest straight-line candidate if OSRM is unreachable. Not
-reachable from this sandbox either (outbound network to
-`router.project-osrm.org` is blocked here) — implemented per the existing
-client-side `src/routing.js` pattern but not live-tested.
+`POST /api/hydrants/nearest` — body `{ lat, lng, premer? }` (note: `lng`, not
+`lon`, and `premer` rather than `premerCevi` — matches the workflow spec's
+exact wording for this one endpoint). Takes the 5 nearest-as-crow-flies
+hydrants (optionally filtered to an exact `fire_hydrant:diameter` match for
+`premer`), road-routes each via OSRM (`lib/routing.js`), and returns whichever
+is actually closest by road. Falls back to the closest straight-line
+candidate if OSRM is unreachable. Not reachable from this sandbox either
+(outbound network to `router.project-osrm.org` is blocked here) — implemented
+per the existing client-side `src/routing.js` pattern but not live-tested.
 
 ## Push notifications
 

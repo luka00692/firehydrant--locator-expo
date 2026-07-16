@@ -5,8 +5,8 @@ const { requireAuth } = require('../../../lib/auth');
 const { requireRole } = require('../../../lib/authz');
 const { sendPushNotification } = require('../../../lib/push');
 
-const SELECT_FIELDS = `id, lastnik_id, ime, st_sedezev, created_at,
-  ST_Y(lokacija_doma::geometry) AS lat, ST_X(lokacija_doma::geometry) AS lon`;
+const SELECT_FIELDS = `id, lastnik_id AS "lastnikId", ime, st_sedezev AS "stSedezev", created_at AS "createdAt",
+  ST_Y(lokacija_doma::geometry) AS lat, ST_X(lokacija_doma::geometry) AS lng`;
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -24,12 +24,14 @@ module.exports = async function handler(req, res) {
     return res.status(200).json(rows[0]);
   }
 
-  // Rename, home-location, and delete are lastnik-only (owner/admin).
-  const membership = await requireRole(res, user.id, groupId, ['lastnik']);
+  // Rename, home-location, and delete are admin-only.
+  const membership = await requireRole(res, user.id, groupId, ['admin']);
   if (!membership) return;
 
   if (req.method === 'PATCH') {
-    const { ime, lat, lon } = req.body || {};
+    const { ime, lokacijaDoma } = req.body || {};
+    const lat = lokacijaDoma?.lat;
+    const lng = lokacijaDoma?.lng;
     try {
       const { rows } = await pool.query(
         `UPDATE skupina SET
@@ -38,7 +40,7 @@ module.exports = async function handler(req, res) {
              ELSE ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography END
          WHERE id = $4
          RETURNING ${SELECT_FIELDS}`,
-        [ime || null, lon ?? null, lat ?? null, groupId]
+        [ime || null, lng ?? null, lat ?? null, groupId]
       );
       return res.status(200).json(rows[0]);
     } catch (err) {
@@ -51,7 +53,7 @@ module.exports = async function handler(req, res) {
     const { rows: members } = await pool.query(
       `SELECT u.push_token FROM uporabnik u
        JOIN clanstvo c ON c.uporabnik_id = u.id
-       WHERE c.skupina_id = $1 AND c.status = 'aktiven' AND u.id != $2`,
+       WHERE c.skupina_id = $1 AND c.status = 'approved' AND u.id != $2`,
       [groupId, user.id]
     );
     await pool.query(`DELETE FROM skupina WHERE id = $1`, [groupId]);
