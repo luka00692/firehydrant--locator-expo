@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300..900;1,400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @keyframes ab-spin { to { transform: rotate(360deg); } }
+  @keyframes ab-fade { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
+  @keyframes ab-sheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes ab-pulse { 0% { transform:scale(.6); opacity:.55; } 70% { transform:scale(2.6); opacity:0; } 100% { opacity:0; } }
+  .me-dot { position:relative; }
+  .me-dot .ring { position:absolute; inset:0; border-radius:50%; background:#C62828; animation:ab-pulse 2s var(--e,cubic-bezier(.22,.61,.36,1)) infinite; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Hanken Grotesk', system-ui, sans-serif; background:#0A1217; color:#4A1212; }
+  .leaflet-container { font-family:'Hanken Grotesk', sans-serif; background:#dce6ea; }
+  .ab-scroll::-webkit-scrollbar { width:0; height:0; }
+  .hpin { display:flex; align-items:center; justify-content:center; }
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(120% 100% at 50% 0%, #0e2733 0%, #060d12 70%);">
+  <div style="position:relative;width:402px;height:872px;background:#0b0f12;border-radius:52px;padding:11px;box-shadow:0 40px 100px rgba(0,0,0,.6), inset 0 0 0 2px #23303a;">
+    <div style="position:relative;width:100%;height:100%;background:#fff;border-radius:42px;overflow:hidden;display:flex;flex-direction:column;">
+
+      <!-- status bar -->
+      <div style="position:absolute;top:0;left:0;right:0;height:46px;z-index:900;display:flex;align-items:center;justify-content:space-between;padding:14px 30px 0;font-size:14px;font-weight:600;color:{{ statusColor }};pointer-events:none;">
+        <span>9:41</span>
+        <span style="display:flex;gap:6px;align-items:center;">
+          <svg width="18" height="12" viewBox="0 0 18 12" fill="none"><rect x="0" y="7" width="3" height="5" rx="1" fill="currentColor"/><rect x="5" y="4" width="3" height="8" rx="1" fill="currentColor"/><rect x="10" y="1.5" width="3" height="10.5" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor" opacity=".35"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12" fill="none"><rect x="1" y="1" width="19" height="10" rx="3" stroke="currentColor" stroke-width="1.2" opacity=".5"/><rect x="2.5" y="2.5" width="14" height="7" rx="1.5" fill="currentColor"/><rect x="21" y="4" width="2" height="4" rx="1" fill="currentColor" opacity=".5"/></svg>
+        </span>
+      </div>
+
+      <!-- ============ ONBOARDING ============ -->
+      <sc-if value="{{ isOnboarding }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;display:flex;flex-direction:column;background:#4A1212;color:#fff;padding:60px 28px 34px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <img src="assets/abelium-znak-bw.svg" alt="Abelium" style="height:20px;filter:brightness(0) invert(1);opacity:.9;" />
+            <button onClick="{{ skipOnboarding }}" style="background:none;border:none;color:rgba(255,255,255,.6);font:inherit;font-size:14px;cursor:pointer;">Preskoči</button>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:center;overflow:auto;min-height:0;padding:20px 0;" class="ab-scroll">
+            <div key="{{ slideKey }}" style="animation:ab-fade .4s var(--e,cubic-bezier(.22,.61,.36,1));">
+              <div style="width:76px;height:76px;border-radius:20px;background:#C62828;display:flex;align-items:center;justify-content:center;margin-bottom:28px;">{{ slideIcon }}</div>
+              <div style="font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#E57373;margin-bottom:14px;">{{ slideEyebrow }}</div>
+              <h1 style="font-size:32px;line-height:1.15;font-weight:700;letter-spacing:-.01em;margin:0 0 16px;">{{ slideTitle }}</h1>
+              <p style="font-size:17px;line-height:1.5;color:rgba(255,255,255,.72);font-weight:300;margin:0;">{{ slideBody }}</p>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:26px;">
+            <sc-for list="{{ slideDots }}" as="d" hint-placeholder-count="3">
+              <span style="height:6px;border-radius:9999px;transition:all .25s;width:{{ d.w }};background:{{ d.c }};"></span>
+            </sc-for>
+          </div>
+          <button onClick="{{ nextSlide }}" style="width:100%;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:16px;font:inherit;font-weight:600;font-size:16px;cursor:pointer;">{{ onboardCta }}</button>
+        </div>
+      </sc-if>
+
+      <!-- ============ AUTH ============ -->
+      <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;padding:66px 28px 30px;overflow:auto;" class="ab-scroll">
+          <img src="assets/abelium-znak.svg" alt="Abelium" style="height:22px;align-self:flex-start;margin-bottom:36px;" />
+          <h1 style="font-size:28px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px;color:#4A1212;">{{ authTitle }}</h1>
+          <p style="font-size:15px;color:#5C6770;margin:0 0 26px;">Aplikacija za gasilska društva za iskanje najbližjega hidranta.</p>
+          <div style="display:flex;gap:10px;margin-bottom:22px;">
+            <button onClick="{{ setLogin }}" style="flex:1;padding:11px;border-radius:9999px;font:inherit;font-weight:600;font-size:14px;cursor:pointer;border:1px solid {{ loginBorder }};background:{{ loginBg }};color:{{ loginFg }};">Prijava</button>
+            <button onClick="{{ setRegister }}" style="flex:1;padding:11px;border-radius:9999px;font:inherit;font-weight:600;font-size:14px;cursor:pointer;border:1px solid {{ regBorder }};background:{{ regBg }};color:{{ regFg }};">Registracija</button>
+          </div>
+          <label style="font-size:13px;font-weight:600;color:#2F3940;margin-bottom:6px;display:block;">E-pošta</label>
+          <input value="{{ email }}" onInput="{{ onEmail }}" placeholder="ime@gasilci.si" style="width:100%;padding:14px 16px;border:1px solid #D9DEE3;border-radius:8px;font:inherit;font-size:15px;margin-bottom:16px;color:#4A1212;" />
+          <label style="font-size:13px;font-weight:600;color:#2F3940;margin-bottom:6px;display:block;">Geslo</label>
+          <input type="password" value="{{ pass }}" onInput="{{ onPass }}" placeholder="••••••••" style="width:100%;padding:14px 16px;border:1px solid #D9DEE3;border-radius:8px;font:inherit;font-size:15px;margin-bottom:22px;color:#4A1212;" />
+          <button onClick="{{ doAuth }}" style="width:100%;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:15px;font:inherit;font-weight:600;font-size:16px;cursor:pointer;margin-bottom:20px;">{{ authTitle }}</button>
+          <div style="display:flex;align-items:center;gap:12px;color:#8A949E;font-size:13px;margin-bottom:20px;"><span style="flex:1;height:1px;background:#ECEFF2;"></span>ali<span style="flex:1;height:1px;background:#ECEFF2;"></span></div>
+          <button onClick="{{ doAuth }}" style="width:100%;background:#fff;color:#4A1212;border:1px solid #D9DEE3;border-radius:9999px;padding:13px;font:inherit;font-weight:600;font-size:15px;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px;"><svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.6 9.2c0-.6-.1-1.2-.2-1.8H9v3.4h4.8a4.1 4.1 0 0 1-1.8 2.7v2.2h2.9c1.7-1.6 2.7-3.9 2.7-6.5z"/><path fill="#34A853" d="M9 18c2.4 0 4.5-.8 6-2.2l-2.9-2.2c-.8.5-1.8.9-3.1.9-2.4 0-4.4-1.6-5.1-3.8H.9v2.3A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.9 10.7a5.4 5.4 0 0 1 0-3.4V5H.9a9 9 0 0 0 0 8z"/><path fill="#EA4335" d="M9 3.6c1.3 0 2.5.5 3.4 1.3l2.6-2.6A9 9 0 0 0 .9 5l3 2.3C4.6 5.2 6.6 3.6 9 3.6z"/></svg>Nadaljuj z Googlom</button>
+          <button onClick="{{ doAuth }}" style="width:100%;background:#000;color:#fff;border:none;border-radius:9999px;padding:14px;font:inherit;font-weight:600;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;"><svg width="16" height="18" viewBox="0 0 16 18" fill="#fff"><path d="M13.4 13.9c-.3.7-.6 1.3-1 1.9-.6.8-1 1.4-1.4 1.7-.6.5-1.2.8-1.8.8-.5 0-1-.1-1.7-.4-.7-.3-1.3-.4-1.8-.4s-1.1.1-1.8.4c-.7.3-1.3.5-1.7.5-.6 0-1.2-.3-1.9-.9-.4-.4-.9-1-1.4-1.8C.9 14.2.4 12.9.1 11.6c-.1-.6-.1-1.2-.1-1.7 0-1.4.3-2.6 1-3.5.5-.8 1.2-1.3 2.1-1.5.4-.1 1 0 1.8.2.7.2 1.1.3 1.3.3.2 0 .7-.1 1.5-.4.8-.2 1.4-.3 1.9-.3 1.4.1 2.5.7 3.2 1.7-1.3.8-1.9 1.9-1.9 3.3 0 1.1.4 2 1.2 2.7.4.3.8.6 1.2.7z"/><path d="M10.6 0c0 .5-.2 1-.5 1.6-.4.7-.9 1.1-1.5 1.4-.2.1-.4.1-.6.1 0-.5.1-1 .4-1.5.2-.4.5-.7.8-.9.3-.2.7-.4 1.1-.5.2 0 .3-.1.3-.1z"/></svg>Nadaljuj z Applom</button>
+        </div>
+      </sc-if>
+
+      <!-- ============ PACKAGES ============ -->
+      <sc-if value="{{ isPackages }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:auto;padding:60px 22px 26px;background:#F6F8FA;" class="ab-scroll">
+          <h1 style="font-size:26px;font-weight:700;letter-spacing:-.01em;margin:0 0 4px;">Izberi paket</h1>
+          <p style="font-size:14px;color:#5C6770;margin:0 0 22px;">En paket = ena skupina = ena licenca.</p>
+          <sc-for list="{{ pkgs }}" as="p" hint-placeholder-count="3">
+            <div onClick="{{ p.onPick }}" style="background:#fff;border:2px solid {{ p.border }};border-radius:14px;padding:18px;margin-bottom:14px;cursor:pointer;transition:border-color .2s;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                  <div style="font-size:18px;font-weight:700;color:#4A1212;">{{ p.name }}</div>
+                  <div style="font-size:13px;color:#5C6770;margin-top:2px;">{{ p.seats }}</div>
+                </div>
+                <div style="font-size:20px;font-weight:700;color:#C62828;">{{ p.price }}</div>
+              </div>
+              <sc-if value="{{ p.selected }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid #ECEFF2;">
+                  <span style="font-size:13px;font-weight:600;color:#2F3940;">Količina</span>
+                  <div style="display:flex;align-items:center;gap:12px;margin-left:auto;">
+                    <button onClick="{{ p.onDec }}" style="width:34px;height:34px;border-radius:9999px;border:1px solid #D9DEE3;background:#fff;font-size:20px;line-height:1;cursor:pointer;color:#4A1212;">−</button>
+                    <span style="font-size:17px;font-weight:700;min-width:20px;text-align:center;">{{ p.qty }}</span>
+                    <button onClick="{{ p.onInc }}" style="width:34px;height:34px;border-radius:9999px;border:1px solid #C62828;background:#C62828;color:#fff;font-size:20px;line-height:1;cursor:pointer;">+</button>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+
+          <div style="margin:8px 0 18px;">
+            <div style="font-size:13px;font-weight:600;color:#2F3940;margin-bottom:10px;">Način plačila</div>
+            <div style="display:flex;gap:10px;">
+              <button onClick="{{ payStripe }}" style="flex:1;padding:12px;border-radius:10px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid {{ stripeBorder }};background:{{ stripeBg }};color:{{ stripeFg }};">Kartica (Stripe)</button>
+              <button onClick="{{ payInvoice }}" style="flex:1;padding:12px;border-radius:10px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid {{ invBorder }};background:{{ invBg }};color:{{ invFg }};">Predračun</button>
+            </div>
+          </div>
+
+          <button onClick="{{ buyContinue }}" style="width:100%;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:15px;font:inherit;font-weight:600;font-size:16px;cursor:pointer;margin-bottom:14px;">Nadaljuj na plačilo</button>
+          <button onClick="{{ guestContinue }}" style="width:100%;background:#fff;color:#4A1212;border:1px solid #D9DEE3;border-radius:9999px;padding:14px;font:inherit;font-weight:600;font-size:15px;cursor:pointer;">Vstopi kot gost</button>
+        </div>
+      </sc-if>
+
+      <!-- ============ CHECKOUT ============ -->
+      <sc-if value="{{ isCheckout }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;padding:66px 26px 30px;overflow:auto;" class="ab-scroll">
+          <button onClick="{{ backToPackages }}" style="background:none;border:none;color:#C62828;font:inherit;font-size:14px;font-weight:600;cursor:pointer;align-self:flex-start;margin-bottom:20px;">← Nazaj</button>
+          <h1 style="font-size:26px;font-weight:700;margin:0 0 20px;">{{ checkoutTitle }}</h1>
+          <div style="background:#F6F8FA;border-radius:14px;padding:18px;margin-bottom:22px;">
+            <div style="display:flex;justify-content:space-between;font-size:15px;margin-bottom:8px;"><span style="color:#5C6770;">{{ coPkgName }} × {{ coQty }}</span><span style="font-weight:600;">{{ coPrice }}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:15px;padding-top:8px;border-top:1px solid #ECEFF2;"><span style="font-weight:700;">Skupaj</span><span style="font-weight:700;color:#C62828;">{{ coPrice }}</span></div>
+          </div>
+          <sc-if value="{{ isStripe }}" hint-placeholder-val="{{ true }}">
+            <div style="border:1px solid #D9DEE3;border-radius:12px;padding:16px;margin-bottom:20px;">
+              <div style="font-size:13px;color:#8A949E;margin-bottom:10px;">Testni Stripe Checkout</div>
+              <div style="background:#F6F8FA;border-radius:8px;padding:12px 14px;font-size:15px;color:#5C6770;letter-spacing:.05em;">4242 4242 4242 4242</div>
+            </div>
+            <button onClick="{{ payNow }}" style="width:100%;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:15px;font:inherit;font-weight:600;font-size:16px;cursor:pointer;">Plačaj {{ coPrice }}</button>
+          </sc-if>
+          <sc-if value="{{ isInvoice }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#FCE7E7;border-radius:12px;padding:16px;margin-bottom:20px;font-size:14px;color:#8E1616;line-height:1.5;">Predračun je bil poslan na tvojo e-pošto. Po nakazilu prejmeš aktivacijsko kodo — vpiši jo spodaj.</div>
+            <label style="font-size:13px;font-weight:600;color:#2F3940;margin-bottom:6px;display:block;">Aktivacijska koda</label>
+            <input value="{{ code }}" onInput="{{ onCode }}" placeholder="npr. GD-8F3A-KMK" style="width:100%;padding:14px 16px;border:1px solid #D9DEE3;border-radius:8px;font:inherit;font-size:15px;margin-bottom:20px;text-transform:uppercase;color:#4A1212;" />
+            <button onClick="{{ payNow }}" style="width:100%;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:15px;font:inherit;font-weight:600;font-size:16px;cursor:pointer;">Aktiviraj licenco</button>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ============ GROUP NEW ============ -->
+      <sc-if value="{{ isGroupNew }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:60px 28px 40px;">
+          <div style="width:64px;height:64px;border-radius:18px;background:#FCE7E7;display:flex;align-items:center;justify-content:center;margin-bottom:24px;"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C62828" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+          <h1 style="font-size:28px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px;">Ustvari skupino</h1>
+          <p style="font-size:15px;color:#5C6770;margin:0 0 26px;">Ime bo iskalni ključ, po katerem se člani pridružijo tvojemu društvu.</p>
+          <label style="font-size:13px;font-weight:600;color:#2F3940;margin-bottom:6px;display:block;">Ime skupine</label>
+          <input value="{{ groupNameInput }}" onInput="{{ onGroupName }}" placeholder="npr. PGD Kamnik" style="width:100%;padding:15px 16px;border:1px solid #D9DEE3;border-radius:8px;font:inherit;font-size:16px;margin-bottom:24px;color:#4A1212;" />
+          <button onClick="{{ createGroup }}" style="width:100%;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:16px;font:inherit;font-weight:600;font-size:16px;cursor:pointer;">Ustvari skupino</button>
+        </div>
+      </sc-if>
+
+      <!-- ============ JOIN ============ -->
+      <sc-if value="{{ isJoin }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:60px 28px 40px;">
+          <div style="width:64px;height:64px;border-radius:18px;background:#FCE7E7;display:flex;align-items:center;justify-content:center;margin-bottom:24px;"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C62828" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></div>
+          <h1 style="font-size:28px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px;">Pridruži se skupini</h1>
+          <p style="font-size:15px;color:#5C6770;margin:0 0 26px;">Vpiši ime društva. Lastnik skupine bo tvojo prošnjo odobril ali zavrnil.</p>
+          <label style="font-size:13px;font-weight:600;color:#2F3940;margin-bottom:6px;display:block;">Ime skupine</label>
+          <input value="{{ joinNameInput }}" onInput="{{ onJoinName }}" placeholder="npr. PGD Kamnik" style="width:100%;padding:15px 16px;border:1px solid #D9DEE3;border-radius:8px;font:inherit;font-size:16px;margin-bottom:24px;color:#4A1212;" />
+          <button onClick="{{ sendRequest }}" style="width:100%;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:16px;font:inherit;font-weight:600;font-size:16px;cursor:pointer;">Pošlji prošnjo</button>
+        </div>
+      </sc-if>
+
+      <!-- ============ WAITING ============ -->
+      <sc-if value="{{ isWaiting }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 34px 40px;background:#4A1212;color:#fff;">
+          <div style="width:60px;height:60px;border:4px solid rgba(255,255,255,.18);border-top-color:#E57373;border-radius:50%;animation:ab-spin 1s linear infinite;margin-bottom:30px;"></div>
+          <h1 style="font-size:26px;font-weight:700;margin:0 0 12px;color:#fff;">Čakam na odobritev</h1>
+          <p style="font-size:15px;color:rgba(255,255,255,.68);line-height:1.5;margin:0 0 8px;">Prošnja za pridružitev skupini <strong style="color:#fff;">{{ joinNameInput }}</strong> je poslana.</p>
+          <p style="font-size:13px;color:rgba(255,255,255,.45);margin:0 0 34px;">Zaslon se posodobi samodejno, ko lastnik odgovori.</p>
+          <button onClick="{{ simApprove }}" style="background:#C62828;color:#fff;border:none;border-radius:9999px;padding:12px 22px;font:inherit;font-weight:600;font-size:14px;cursor:pointer;margin-bottom:12px;">Simuliraj odobritev</button>
+          <button onClick="{{ cancelJoin }}" style="background:none;border:none;color:rgba(255,255,255,.5);font:inherit;font-size:14px;cursor:pointer;">Prekliči</button>
+        </div>
+      </sc-if>
+
+      <!-- ============ APP SHELL ============ -->
+      <sc-if value="{{ inApp }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1;display:flex;flex-direction:column;position:relative;min-height:0;">
+
+          <!-- MAP TAB -->
+          <div style="position:absolute;inset:0;display:{{ mapDisplay }};flex-direction:column;">
+            <div style="position:relative;flex:1;">
+              <div id="ab-map" style="position:absolute;inset:0;background:#dce6ea;"></div>
+
+              <!-- search overlay -->
+              <div style="position:absolute;top:52px;left:12px;right:12px;z-index:600;">
+                <div style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;padding:11px 14px;box-shadow:0 8px 24px rgba(0,48,64,.14);">
+                  <input value="{{ addrInput }}" onInput="{{ onAddr }}" onKeyDown="{{ onAddrKey }}" placeholder="Vpiši kateri koli naslov v Sloveniji…" style="flex:1;border:none;outline:none;font:inherit;font-size:15px;background:none;color:#4A1212;" />
+                  <sc-if value="{{ searching }}" hint-placeholder-val="{{ false }}"><div style="width:16px;height:16px;border:2px solid #F0C4C4;border-top-color:#C62828;border-radius:50%;animation:ab-spin .8s linear infinite;"></div></sc-if>
+                  <button onClick="{{ runGeocode }}" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border:none;border-radius:9px;background:#C62828;cursor:pointer;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+                </div>
+                <sc-if value="{{ hasSuggestions }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:6px;background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,48,64,.14);overflow:hidden;">
+                    <sc-for list="{{ suggestions }}" as="sug" hint-placeholder-count="3">
+                      <button onClick="{{ sug.onPick }}" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid #F0C4C4;padding:11px 14px;font:inherit;font-size:13px;color:#4A1212;cursor:pointer;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C62828" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ sug.label }}</span>
+                      </button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ notFound }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:6px;background:#fff;border-radius:10px;padding:10px 14px;font-size:13px;color:#8E1616;box-shadow:0 8px 24px rgba(0,48,64,.14);">Naslova ni bilo mogoče najti. Poskusi z ulico in krajem (npr. »Glavni trg 1, Kranj«).</div>
+                </sc-if>
+                <div style="display:flex;gap:8px;margin-top:10px;">
+                  <button onClick="{{ useMyLocation }}" style="display:flex;align-items:center;gap:7px;background:#fff;border:none;border-radius:9999px;padding:9px 14px;font:inherit;font-size:13px;font-weight:600;color:#4A1212;box-shadow:0 4px 14px rgba(0,48,64,.12);cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C62828" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Moja lokacija</button>
+                  <button onClick="{{ toggleFilters }}" style="display:flex;align-items:center;gap:7px;background:{{ filterBtnBg }};color:{{ filterBtnFg }};border:none;border-radius:9999px;padding:9px 14px;font:inherit;font-size:13px;font-weight:600;box-shadow:0 4px 14px rgba(0,48,64,.12);cursor:pointer;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Kategorije</button>
+                </div>
+                <sc-if value="{{ showFilters }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:10px;background:#fff;border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(0,48,64,.14);animation:ab-fade .2s ease-out;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#8A949E;margin-bottom:8px;">Vrsta hidranta</div>
+                    <div style="display:flex;gap:8px;margin-bottom:14px;">
+                      <button onClick="{{ setTypeVsi }}" style="flex:1;padding:9px;border-radius:9999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;{{ fTypeVsi }}">Vsi</button>
+                      <button onClick="{{ setTypeNad }}" style="flex:1;padding:9px;border-radius:9999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;{{ fTypeNad }}">Nadzemni</button>
+                      <button onClick="{{ setTypePod }}" style="flex:1;padding:9px;border-radius:9999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;{{ fTypePod }}">Podzemni</button>
+                    </div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#8A949E;margin-bottom:8px;">Premer priključka</div>
+                    <div style="display:flex;gap:8px;">
+                      <button onClick="{{ setP0 }}" style="flex:1;padding:9px 6px;border-radius:9999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;{{ fPVsi }}">Vsi</button>
+                      <button onClick="{{ setP80 }}" style="flex:1;padding:9px 6px;border-radius:9999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;{{ fP80 }}">80</button>
+                      <button onClick="{{ setP100 }}" style="flex:1;padding:9px 6px;border-radius:9999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;{{ fP100 }}">100</button>
+                      <button onClick="{{ setP150 }}" style="flex:1;padding:9px 6px;border-radius:9999px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;{{ fP150 }}">150</button>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ hasFire }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:10px;background:#4A1212;color:#fff;border-radius:10px;padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(0,48,64,.18);">
+                    <span style="width:9px;height:9px;border-radius:50%;background:#E4572E;flex-shrink:0;"></span>{{ fireMsg }}
+                    <button onClick="{{ clearFire }}" style="margin-left:auto;background:none;border:none;color:rgba(255,255,255,.6);font:inherit;font-size:18px;line-height:1;cursor:pointer;">×</button>
+                  </div>
+                </sc-if>
+              </div>
+
+              <!-- attribution / count -->
+              <div style="position:absolute;bottom:8px;left:12px;z-index:500;background:rgba(255,255,255,.85);border-radius:6px;padding:4px 9px;font-size:11px;color:#5C6770;">{{ hydrantCount }} hidrantov · vsa Slovenija</div>
+
+              <!-- hydrant detail sheet -->
+              <sc-if value="{{ hasSelected }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;left:0;right:0;bottom:78px;z-index:850;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -12px 40px rgba(0,48,64,.2);padding:18px 20px 22px;animation:ab-sheet .3s cubic-bezier(.22,.61,.36,1);">
+                  <div style="width:38px;height:4px;border-radius:9999px;background:#D9DEE3;margin:0 auto 16px;"></div>
+                  <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;">
+                    <div style="width:44px;height:44px;border-radius:12px;background:{{ selTypeBg }};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{ selTypeColor }}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5S12.5 5 12 3c-.5 2-2 4-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/></svg></div>
+                    <div style="flex:1;">
+                      <div style="font-size:18px;font-weight:700;color:#4A1212;">{{ selTypeLabel }}</div>
+                      <div style="font-size:13px;color:#5C6770;">{{ selSubtitle }}</div>
+                    </div>
+                    <button onClick="{{ closeCard }}" style="background:none;border:none;color:#8A949E;font-size:24px;line-height:1;cursor:pointer;">×</button>
+                  </div>
+                  <p style="font-size:13px;line-height:1.5;color:#5C6770;margin:0 0 16px;">{{ selDesc }}</p>
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
+                    <div style="background:#F6F8FA;border-radius:10px;padding:11px;"><div style="font-size:11px;color:#8A949E;text-transform:uppercase;letter-spacing:.05em;">Premer</div><div style="font-size:16px;font-weight:700;color:#4A1212;">{{ selPremer }}</div></div>
+                    <div style="background:#F6F8FA;border-radius:10px;padding:11px;"><div style="font-size:11px;color:#8A949E;text-transform:uppercase;letter-spacing:.05em;">Pretok</div><div style="font-size:16px;font-weight:700;color:#4A1212;">{{ selPretok }}</div></div>
+                    <div style="background:#F6F8FA;border-radius:10px;padding:11px;"><div style="font-size:11px;color:#8A949E;text-transform:uppercase;letter-spacing:.05em;">Tlak</div><div style="font-size:16px;font-weight:700;color:#4A1212;">{{ selTlak }}</div></div>
+                  </div>
+                  <sc-if value="{{ selHasRoute }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;background:#FCE7E7;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+                      <div><div style="font-size:11px;color:#E57373;text-transform:uppercase;letter-spacing:.05em;">Po cestah</div><div style="font-size:16px;font-weight:700;color:#8E1616;">{{ selRoadDist }}</div></div>
+                      <div><div style="font-size:11px;color:#E57373;text-transform:uppercase;letter-spacing:.05em;">Čas vožnje</div><div style="font-size:16px;font-weight:700;color:#8E1616;">{{ selRoadTime }}</div></div>
+                    </div>
+                  </sc-if>
+                  <div style="display:flex;gap:10px;">
+                    <button onClick="{{ showRoute }}" style="flex:1;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:14px;font:inherit;font-weight:600;font-size:15px;cursor:pointer;">Pokaži pot</button>
+                    <button onClick="{{ openNav }}" style="flex:1;background:#fff;color:#4A1212;border:1px solid #D9DEE3;border-radius:9999px;padding:14px;font:inherit;font-weight:600;font-size:15px;cursor:pointer;">Odpri navigacijo</button>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+
+          <!-- SKUPINA TAB -->
+          <div style="position:absolute;inset:0;display:{{ skupinaDisplay }};flex-direction:column;overflow:auto;padding:52px 20px 90px;background:#F6F8FA;" class="ab-scroll">
+            <h1 style="font-size:24px;font-weight:700;margin:0 0 4px;">{{ groupName }}</h1>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+              <span style="font-size:14px;color:#5C6770;">{{ roleLabel }}</span>
+              <span style="width:4px;height:4px;border-radius:50%;background:#B6BEC6;"></span>
+              <span style="font-size:14px;color:#5C6770;">{{ seatsLabel }}</span>
+            </div>
+
+            <sc-if value="{{ isOwner }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:10px;margin-bottom:22px;">
+                <button onClick="{{ renameGroup }}" style="flex:1;background:#fff;border:1px solid #D9DEE3;border-radius:10px;padding:12px;font:inherit;font-size:13px;font-weight:600;color:#4A1212;cursor:pointer;">Preimenuj</button>
+                <button onClick="{{ setHome }}" style="flex:1;background:#fff;border:1px solid #D9DEE3;border-radius:10px;padding:12px;font:inherit;font-size:13px;font-weight:600;color:#4A1212;cursor:pointer;">Lokacija doma</button>
+              </div>
+
+              <sc-if value="{{ hasRequests }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#C62828;margin-bottom:10px;">Čakajoče prošnje ({{ requestCount }})</div>
+                <sc-for list="{{ requests }}" as="r" hint-placeholder-count="2">
+                  <div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 2px rgba(0,48,64,.06);">
+                    <div style="width:40px;height:40px;border-radius:50%;background:#FCE7E7;color:#C62828;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;">{{ r.initials }}</div>
+                    <div style="flex:1;"><div style="font-size:15px;font-weight:600;color:#4A1212;">{{ r.name }}</div><div style="font-size:12px;color:#8A949E;">{{ r.when }}</div></div>
+                    <button onClick="{{ r.onReject }}" style="width:36px;height:36px;border-radius:9999px;border:1px solid #D9DEE3;background:#fff;cursor:pointer;color:#5C6770;font-size:16px;">×</button>
+                    <button onClick="{{ r.onApprove }}" disabled="{{ seatsFull }}" style="width:36px;height:36px;border-radius:9999px;border:none;background:{{ approveBg }};color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ seatsFull }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:#E4572E;margin:2px 0 18px;">Paket je poln ({{ seatsLabel }}). Odstrani člana za dodatno mesto.</div></sc-if>
+              </sc-if>
+            </sc-if>
+
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#8A949E;margin:14px 0 10px;">Člani ({{ memberCount }})</div>
+            <sc-for list="{{ members }}" as="m" hint-placeholder-count="3">
+              <div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 2px rgba(0,48,64,.06);">
+                <div style="width:40px;height:40px;border-radius:50%;background:{{ m.avBg }};color:{{ m.avFg }};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;">{{ m.initials }}</div>
+                <div style="flex:1;"><div style="font-size:15px;font-weight:600;color:#4A1212;">{{ m.name }}</div><div style="font-size:12px;color:{{ m.roleColor }};font-weight:600;">{{ m.roleLabel }}</div></div>
+                <sc-if value="{{ m.canManage }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ m.onMakeAdmin }}" style="background:none;border:1px solid #D9DEE3;border-radius:9999px;padding:7px 12px;font:inherit;font-size:12px;font-weight:600;color:#C62828;cursor:pointer;">Admin</button>
+                  <button onClick="{{ m.onRemove }}" style="background:none;border:none;color:#B6BEC6;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;">×</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- VOZILA TAB -->
+          <div style="position:absolute;inset:0;display:{{ vozilaDisplay }};flex-direction:column;overflow:auto;padding:52px 20px 90px;background:#F6F8FA;" class="ab-scroll">
+            <h1 style="font-size:24px;font-weight:700;margin:0 0 4px;">Vozila</h1>
+            <p style="font-size:14px;color:#5C6770;margin:0 0 20px;">Skupna društvu. Izbrano vozilo določi premer cevi za iskanje.</p>
+            <sc-for list="{{ vehicles }}" as="v" hint-placeholder-count="2">
+              <div onClick="{{ v.onSelect }}" style="background:#fff;border:2px solid {{ v.border }};border-radius:12px;padding:15px;margin-bottom:12px;display:flex;align-items:center;gap:12px;cursor:pointer;">
+                <div style="width:44px;height:44px;border-radius:11px;background:{{ v.iconBg }};display:flex;align-items:center;justify-content:center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{ v.iconColor }}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M14 9h4l4 4v4a1 1 0 0 1-1 1h-1"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>
+                <div style="flex:1;"><div style="font-size:16px;font-weight:700;color:#4A1212;">{{ v.name }}</div><div style="font-size:13px;color:#5C6770;">Premer cevi {{ v.premer }}</div></div>
+                <sc-if value="{{ v.active }}" hint-placeholder-val="{{ true }}"><span style="font-size:12px;font-weight:700;color:#C62828;background:#FCE7E7;padding:5px 10px;border-radius:9999px;">Izbrano</span></sc-if>
+                <sc-if value="{{ v.canManage }}" hint-placeholder-val="{{ false }}"><button onClick="{{ v.onRemove }}" style="background:none;border:none;color:#B6BEC6;font-size:20px;cursor:pointer;padding:0 4px;">×</button></sc-if>
+              </div>
+            </sc-for>
+
+            <sc-if value="{{ isOwner }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border-radius:12px;padding:16px;margin-top:8px;box-shadow:0 1px 2px rgba(0,48,64,.06);">
+                <div style="font-size:14px;font-weight:700;color:#4A1212;margin-bottom:12px;">Dodaj vozilo</div>
+                <input value="{{ vehNameInput }}" onInput="{{ onVehName }}" placeholder="Ime vozila (npr. GVC-1)" style="width:100%;padding:12px 14px;border:1px solid #D9DEE3;border-radius:8px;font:inherit;font-size:14px;margin-bottom:10px;color:#4A1212;" />
+                <div style="display:flex;gap:8px;margin-bottom:12px;">
+                  <sc-for list="{{ premerOptions }}" as="po" hint-placeholder-count="3">
+                    <button onClick="{{ po.onPick }}" style="flex:1;padding:10px;border-radius:8px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid {{ po.border }};background:{{ po.bg }};color:{{ po.fg }};">{{ po.label }}</button>
+                  </sc-for>
+                </div>
+                <button onClick="{{ addVehicle }}" style="width:100%;background:#C62828;color:#fff;border:none;border-radius:9999px;padding:12px;font:inherit;font-weight:600;font-size:15px;cursor:pointer;">Dodaj</button>
+              </div>
+            </sc-if>
+          </div>
+
+          <!-- PROFIL TAB -->
+          <div style="position:absolute;inset:0;display:{{ profilDisplay }};flex-direction:column;overflow:auto;padding:52px 20px 90px;background:#F6F8FA;" class="ab-scroll">
+            <h1 style="font-size:24px;font-weight:700;margin:0 0 20px;">Profil</h1>
+            <div style="background:#fff;border-radius:14px;padding:20px;display:flex;align-items:center;gap:14px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,48,64,.06);">
+              <div style="width:56px;height:56px;border-radius:50%;background:#4A1212;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;">{{ myInitials }}</div>
+              <div><div style="font-size:17px;font-weight:700;color:#4A1212;">{{ myName }}</div><div style="font-size:13px;color:#5C6770;">{{ email }}</div></div>
+            </div>
+            <div style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,48,64,.06);">
+              <div style="display:flex;justify-content:space-between;padding:15px 18px;border-bottom:1px solid #ECEFF2;"><span style="color:#5C6770;font-size:14px;">Skupina</span><span style="font-weight:600;font-size:14px;color:#4A1212;">{{ groupName }}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:15px 18px;border-bottom:1px solid #ECEFF2;"><span style="color:#5C6770;font-size:14px;">Vloga</span><span style="font-weight:600;font-size:14px;color:#4A1212;">{{ roleLabel }}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:15px 18px;"><span style="color:#5C6770;font-size:14px;">Paket</span><span style="font-weight:600;font-size:14px;color:#4A1212;">{{ packageLabel }}</span></div>
+            </div>
+            <button onClick="{{ signOut }}" style="width:100%;background:#fff;color:#E4572E;border:1px solid #F0D0C7;border-radius:9999px;padding:14px;font:inherit;font-weight:600;font-size:15px;cursor:pointer;">Odjava</button>
+            <p style="font-size:11px;color:#B6BEC6;margin-top:20px;text-align:center;line-height:1.5;">Ikone: Lucide (nadomestek — ni del uradnega CGP Abelium).</p>
+          </div>
+
+          <!-- BOTTOM TAB BAR -->
+          <div style="position:absolute;left:0;right:0;bottom:0;z-index:800;height:78px;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);border-top:1px solid #ECEFF2;display:flex;padding-bottom:14px;">
+            <button onClick="{{ tabMap }}" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:12px;cursor:pointer;color:{{ mapTabColor }};font:inherit;">
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+              <span style="font-size:11px;font-weight:600;">Zemljevid</span>
+            </button>
+            <button onClick="{{ tabSkupina }}" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:12px;cursor:pointer;color:{{ skupinaTabColor }};font:inherit;position:relative;">
+              <sc-if value="{{ hasRequests }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:8px;right:calc(50% - 20px);width:9px;height:9px;border-radius:50%;background:#E4572E;border:2px solid #fff;"></span></sc-if>
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span style="font-size:11px;font-weight:600;">Skupina</span>
+            </button>
+            <button onClick="{{ tabVozila }}" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:12px;cursor:pointer;color:{{ vozilaTabColor }};font:inherit;">
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M14 9h4l4 4v4a1 1 0 0 1-1 1h-1"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+              <span style="font-size:11px;font-weight:600;">Vozila</span>
+            </button>
+            <button onClick="{{ tabProfil }}" style="flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:12px;cursor:pointer;color:{{ profilTabColor }};font:inherit;">
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span style="font-size:11px;font-weight:600;">Profil</span>
+            </button>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:460,&quot;height&quot;:920}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'onboarding',
+    slide: 0,
+    authMode: 'login',
+    email: 'gasilec@pgd-kamnik.si',
+    pass: '',
+    pkg: 'medium',
+    qty: { small:1, medium:1, large:1 },
+    pay: 'stripe',
+    code: '',
+    groupNameInput: '',
+    joinNameInput: '',
+    tab: 'map',
+    role: 'owner',
+    packageLabel: 'Srednji',
+    groupName: 'PGD Kamnik',
+    seatsTotal: 50,
+    members: [
+      { id:'u0', name:'Ti (Janez Novak)', role:'owner' },
+      { id:'u1', name:'Marko Zupan', role:'member' },
+      { id:'u2', name:'Ana Kovač', role:'member' },
+      { id:'u3', name:'Peter Horvat', role:'member' },
+    ],
+    requests: [
+      { id:'r1', name:'Luka Kranjc', when:'pred 4 min' },
+      { id:'r2', name:'Nina Bizjak', when:'pred 12 min' },
+    ],
+    vehicles: [
+      { id:'v1', name:'GVC-1', premer:110, active:true },
+      { id:'v2', name:'GVGP-1', premer:75, active:false },
+    ],
+    activeVehicle:'v1',
+    vehNameInput:'',
+    vehPremer:110,
+    addrInput:'',
+    fType:'vsi', fPremer:'vsi', showFilters:false,
+    suggestions:[], notFound:false,
+    searching:false,
+    fire:null,        // {lat,lng,label}
+    selected:null,    // hydrant object
+    nearest:[],
+    routeInfo:null,   // {dist,time} for selected
+  };
+
+  // ---------- lifecycle ----------
+  componentDidMount(){ this.allHydrants = this.seedHydrants(); this.loaded = {}; }
+  componentDidUpdate(){ this.maybeInitMap(); }
+
+  // ---------- seed data across Slovenia ----------
+  seedHydrants(){
+    const towns = [
+      ['Ljubljana',46.056,14.506,120,0.06],['Maribor',46.554,15.646,80,0.05],['Celje',46.231,15.267,52,0.04],
+      ['Kranj',46.238,14.356,46,0.035],['Koper',45.548,13.730,44,0.04],['Novo mesto',45.804,15.169,40,0.035],
+      ['Velenje',46.360,15.111,34,0.03],['Nova Gorica',45.955,13.648,34,0.03],['Ptuj',46.420,15.870,32,0.03],
+      ['Murska Sobota',46.658,16.166,28,0.03],['Kamnik',46.225,14.612,40,0.035],['Domžale',46.138,14.594,34,0.03],
+      ['Škofja Loka',46.166,14.306,28,0.028],['Jesenice',46.431,14.058,28,0.028],['Postojna',45.775,14.214,24,0.028],
+      ['Trbovlje',46.155,15.053,22,0.025],['Slovenj Gradec',46.510,15.081,22,0.025],['Kočevje',45.642,14.863,20,0.03],
+      ['Ajdovščina',45.887,13.908,20,0.025],['Brežice',45.905,15.594,20,0.025],['Idrija',46.001,14.030,18,0.025],
+      ['Bled',46.369,14.114,22,0.025],['Ravne na Koroškem',46.545,14.966,18,0.025],['Sežana',45.707,13.868,18,0.025],
+      ['Tržič',46.363,14.310,24,0.025],['Litija',46.058,14.831,18,0.025],['Grosuplje',45.956,14.658,20,0.025],
+      ['Kranjska Gora',46.485,13.786,16,0.025],['Ilirska Bistrica',45.567,14.245,14,0.025],['Cerknica',45.796,14.362,14,0.025],
+      ['Krško',45.960,15.492,20,0.028],['Trebnje',45.907,15.010,14,0.025],['Ribnica',45.740,14.727,14,0.022],
+      ['Vrhnika',45.964,14.294,20,0.025],['Logatec',45.914,14.226,16,0.025],['Kranj-Šenčur',46.245,14.416,12,0.02],
+      ['Radovljica',46.343,14.174,18,0.025],['Slovenska Bistrica',46.393,15.573,18,0.025],['Žalec',46.252,15.164,18,0.025],
+      ['Lendava',46.565,16.452,14,0.025],['Ormož',46.409,16.152,12,0.022],['Metlika',45.647,15.316,12,0.022],
+      ['Črnomelj',45.573,15.190,14,0.025],['Sevnica',46.010,15.306,14,0.025],['Zagorje ob Savi',46.135,14.997,16,0.025],
+      ['Hrastnik',46.144,15.083,12,0.02],['Šoštanj',46.379,15.049,12,0.02],['Mozirje',46.339,14.964,10,0.02],
+      ['Kobarid',46.246,13.579,10,0.022],['Tolmin',46.183,13.732,12,0.022],['Bovec',46.338,13.552,10,0.025],
+      ['Piran',45.528,13.568,16,0.02],['Izola',45.539,13.660,16,0.02],['Portorož',45.514,13.594,12,0.02],
+      ['Ptuj-Kidričevo',46.404,15.786,12,0.025],['Gornja Radgona',46.679,15.995,12,0.025],['Rogaška Slatina',46.238,15.639,12,0.022],
+      ['Šmarje pri Jelšah',46.227,15.520,10,0.025],['Slovenske Konjice',46.337,15.424,14,0.025],['Vojnik',46.288,15.303,10,0.02],
+      ['Medvode',46.140,14.412,16,0.025],['Vodice',46.190,14.494,10,0.02],['Mengeš',46.167,14.575,12,0.02],
+      ['Lukovica',46.170,14.690,8,0.02],['Moravče',46.136,14.745,8,0.02],['Ig',45.960,14.528,10,0.022],
+      ['Škofljica',45.984,14.575,12,0.02],['Brezovica',45.976,14.428,12,0.022],['Domžale-Radomlje',46.155,14.610,10,0.018],
+      ['Bohinjska Bistrica',46.273,13.945,10,0.025],['Cerkno',46.129,13.985,8,0.02],['Žiri',46.043,14.109,10,0.02],
+      ['Gorenja vas',46.107,14.148,8,0.02],['Sodražica',45.760,14.635,7,0.02],['Loški Potok',45.703,14.596,6,0.02],
+      ['Semič',45.646,15.183,7,0.02],['Šentjernej',45.842,15.336,9,0.022],['Straža',45.775,15.077,8,0.02],
+      ['Mokronog',45.937,15.144,7,0.02],['Šentjur',46.216,15.397,12,0.025],['Laško',46.155,15.235,12,0.022],
+      ['Dravograd',46.590,15.017,10,0.022],['Muta',46.611,15.163,8,0.02],['Radlje ob Dravi',46.615,15.226,9,0.022],
+      ['Prevalje',46.545,14.919,9,0.02],['Črna na Koroškem',46.470,14.849,7,0.022],['Mežica',46.522,14.856,7,0.02],
+      ['Beltinci',46.607,16.240,9,0.022],['Ljutomer',46.520,16.198,12,0.025],['Radenci',46.641,16.041,9,0.02],
+      ['Rače',46.451,15.677,9,0.02],['Miklavž',46.508,15.696,8,0.02],['Lenart',46.575,15.831,9,0.022],
+      ['Pesnica',46.605,15.677,7,0.02],['Ruše',46.539,15.514,10,0.022],['Selnica ob Dravi',46.552,15.494,7,0.02],
+      ['Ajdovščina-Vipava',45.848,13.962,8,0.02],['Komenda',46.207,14.539,9,0.02],['Cerklje na Gorenjskem',46.253,14.489,8,0.02],
+    ];
+    let rng = this.mulberry32(20260716); let id=0; const out=[];
+    const types=['nadzemni','podzemni']; const premers=[80,80,100,100,100,150];
+    const mk=(lat,lng,name)=>{ const hy={ id:'s'+(id++),lat,lng,type:types[rng()<0.55?0:1],town:name };
+      hy.premer=premers[Math.floor(rng()*premers.length)]; hy.cat=hy.premer;
+      hy.pretok=({80:600,100:1200,150:2400})[hy.premer]+Math.floor(rng()*200);
+      hy.tlak=(3.5+rng()*3).toFixed(1); return hy; };
+    towns.forEach(([name,lat,lng,n,spread])=>{
+      for(let i=0;i<n;i++){
+        const r = 0.003 + rng()*(spread||0.03);
+        const a = rng()*Math.PI*2;
+        out.push(mk(lat + r*Math.sin(a), lng + (r*Math.cos(a))/Math.cos(lat*Math.PI/180), name));
+      }
+    });
+    // rural scatter across the country so hydrants show everywhere, not only in towns
+    let placed=0, tries=0;
+    while(placed<220 && tries<4000){
+      tries++;
+      const lat = 45.42 + rng()*1.45;
+      const lng = 13.45 + rng()*3.1;
+      if(!this.inSLO(lat,lng)) continue;   // keep only points inside Slovenia
+      out.push(mk(lat, lng, 'Podeželje')); placed++;
+    }
+    return out;
+  }
+  mulberry32(a){ return function(){ a|=0;a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+  // simplified Slovenia border outline [lat,lng]
+  SLO=[[46.52,13.70],[46.62,14.45],[46.70,15.65],[46.68,16.10],[46.87,16.30],[46.60,16.52],[46.40,16.35],[46.30,16.06],[46.05,15.72],[45.80,15.72],[45.62,15.33],[45.45,15.28],[45.48,14.92],[45.42,14.30],[45.45,13.90],[45.47,13.58],[45.60,13.72],[45.80,13.62],[46.10,13.63],[46.24,13.50],[46.40,13.55]];
+  inSLO(lat,lng){ const p=this.SLO; let inside=false; for(let i=0,j=p.length-1;i<p.length;j=i++){ const yi=p[i][0],xi=p[i][1],yj=p[j][0],xj=p[j][1]; if(((yi>lat)!==(yj>lat)) && (lng < (xj-xi)*(lat-yi)/(yj-yi)+xi)) inside=!inside; } return inside; }
+  matchFilter(h){ const st=this.state; return (st.fType==='vsi'||h.type===st.fType) && (st.fPremer==='vsi'||(h.cat!=null?h.cat:h.premer)===st.fPremer); }
+  snapCat(d){ if(d==null) return null; return [80,100,150].reduce((p,c)=>Math.abs(c-d)<Math.abs(p-d)?c:p,100); }
+  haversine(a,b){ const R=6371000,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180,la1=a.lat*Math.PI/180,la2=b.lat*Math.PI/180; const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+
+  // ---------- map ----------
+  maybeInitMap(){
+    if(this.state.screen!=='app' || this.map || !window.L) return;
+    const el = document.getElementById('ab-map');
+    if(!el) return;
+    const L = window.L;
+    const map = L.map(el,{zoomControl:false,attributionControl:false}).setView([46.15,14.99],8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+    L.control.zoom({position:'bottomright'}).addTo(map);
+    this.map = map;
+    this.hlayer = L.layerGroup().addTo(map);
+    this.markerIndex = {};
+    this.renderHydrants();
+    map.on('click', e => this.setFire({lat:e.latlng.lat,lng:e.latlng.lng,label:'Izbrana točka na zemljevidu'}));
+    map.on('moveend', ()=> this.loadOverpass());
+    setTimeout(()=>map.invalidateSize(),200);
+    this.loadCountry();
+  }
+  async loadCountry(){
+    if(this._countryLoaded) return; this._countryLoaded=true;
+    const q=`[out:json][timeout:90];area["ISO3166-1"="SI"][admin_level=2]->.a;node["emergency"="fire_hydrant"](area.a);out 15000;`;
+    for(const ep of ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter']){
+      try{
+        const r=await fetch(ep,{method:'POST',body:'data='+encodeURIComponent(q)});
+        const j=await r.json();
+        const real=[];
+        j.elements.forEach(e=>{
+          if(e.lat==null) return; const t=e.tags||{};
+          let type='nadzemni'; const ht=t['fire_hydrant:type'];
+          if(ht==='underground'||t['fire_hydrant:position']==='underground') type='podzemni';
+          const draw=parseInt(t['fire_hydrant:diameter']||t['diameter']||'',10);
+          const dia=Number.isFinite(draw)?draw:null;
+          const flow=parseInt(t['flow_rate']||t['fire_hydrant:flow_rate']||'',10);
+          const pres=parseFloat(t['pressure']||t['fire_hydrant:pressure']||'');
+          real.push({ id:'o'+e.id, lat:e.lat, lng:e.lon, type, town:t['addr:city']||t['addr:place']||'',
+            premer: dia, cat: this.snapCat(dia), pretok: Number.isFinite(flow)?flow:null, tlak: Number.isFinite(pres)?pres.toFixed(1):null });
+        });
+        if(real.length>200){
+          this.allHydrants = real;   // replace synthetic seed with real OSM data
+          this.markerIndex={}; this.renderHydrants(); this.forceUpdate();
+          return;
+        }
+      }catch(err){ /* try next endpoint */ }
+    }
+    this._countryLoaded=false;   // all endpoints failed: keep seed as fallback
+  }
+  hIcon(color,size){ const L=window.L; const s=size||26; return L.divIcon({className:'hpin',iconSize:[s,s],iconAnchor:[s/2,s],html:`<svg width="${s}" height="${s*1.25}" viewBox="0 0 24 30"><path d="M12 0C6 0 1.5 4.5 1.5 10.5 1.5 18 12 30 12 30S22.5 18 22.5 10.5C22.5 4.5 18 0 12 0z" fill="${color}"/><circle cx="12" cy="10.5" r="4" fill="#fff"/></svg>`}); }
+  fireIcon(){ const L=window.L; return L.divIcon({className:'hpin',iconSize:[30,30],iconAnchor:[15,30],html:`<svg width="30" height="37" viewBox="0 0 24 30"><path d="M12 0C6 0 1.5 4.5 1.5 10.5 1.5 18 12 30 12 30S22.5 18 22.5 10.5C22.5 4.5 18 0 12 0z" fill="#E4572E"/><path d="M12 5c-.5 2-2 3-3 4.5S7.5 12 7.5 13.5A4.5 4.5 0 0 0 16.5 13.5c0-1.3-.7-2.5-2-4-1-1.2-2-2.5-2.5-4.5z" fill="#fff"/></svg>`}); }
+  meIcon(){ const L=window.L; return L.divIcon({className:'me-dot',iconSize:[22,22],iconAnchor:[11,11],html:`<div class="ring"></div><div style="position:absolute;inset:0;border-radius:50%;background:#C62828;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,48,64,.4);"></div>`}); }
+  renderHydrants(){
+    if(!this.hlayer) return; const L=window.L; this.hlayer.clearLayers(); this.markerIndex={};
+    this.allHydrants.forEach(h=>{
+      if(!this.matchFilter(h)) return;
+      const isNear = this.state.nearest[0] && this.state.nearest[0].id===h.id;
+      const m = L.marker([h.lat,h.lng],{icon:this.hIcon(isNear?'#4A1212':(h.type==='nadzemni'?'#C62828':'#E57373'), isNear?26:18)});
+      m.on('click',()=>this.selectHydrant(h));
+      m.addTo(this.hlayer); this.markerIndex[h.id]=m;
+    });
+    if(this.fireMarker){ this.fireMarker.addTo(this.hlayer); }
+    if(this.routeLine){ this.routeLine.addTo(this.hlayer); }
+  }
+  async loadOverpass(){
+    if(!this.map || this.map.getZoom()<13) return;
+    const b=this.map.getBounds(); const key=[b.getSouth(),b.getWest(),b.getNorth(),b.getEast()].map(x=>x.toFixed(2)).join(',');
+    if(this._opKey===key) return; this._opKey=key;
+    const q=`[out:json][timeout:20];node["emergency"="fire_hydrant"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});out 400;`;
+    try{
+      const r=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q)});
+      const j=await r.json(); let added=0;
+      j.elements.forEach(e=>{
+        const oid='o'+e.id; if(this.markerIndex[oid]||this.allHydrants.find(x=>x.id===oid))return;
+        if(!this.inSLO(e.lat,e.lon)) return;   // drop hydrants outside Slovenia
+        const t=e.tags||{};
+        let type='nadzemni'; if(t['fire_hydrant:type']==='underground'||t['fire_hydrant:position']==='underground') type='podzemni';
+        const draw=parseInt(t['fire_hydrant:diameter']||t['diameter']||'',10); const dia=Number.isFinite(draw)?draw:null;
+        const flow=parseInt(t['flow_rate']||t['fire_hydrant:flow_rate']||'',10); const pres=parseFloat(t['pressure']||t['fire_hydrant:pressure']||'');
+        const hy={id:oid,lat:e.lat,lng:e.lon,type,town:t['addr:city']||'',premer:dia,cat:this.snapCat(dia),pretok:Number.isFinite(flow)?flow:null,tlak:Number.isFinite(pres)?pres.toFixed(1):null};
+        this.allHydrants.push(hy); added++;
+      });
+      if(added){ this.renderHydrants(); this.forceUpdate(); }
+    }catch(err){ /* offline / rate-limited: seeded data remains */ }
+  }
+
+  setFire(pt){
+    const L=window.L;
+    this.setState({fire:pt, selected:null, routeInfo:null});
+    if(this.fireMarker) this.hlayer.removeLayer(this.fireMarker);
+    if(this.routeLine){ this.hlayer.removeLayer(this.routeLine); this.routeLine=null; }
+    this.fireMarker = L.marker([pt.lat,pt.lng],{icon:(pt.kind==='me'?this.meIcon():this.fireIcon()),zIndexOffset:1000}).addTo(this.hlayer);
+    if(pt.kind==='me' && pt.acc){ if(this.accCircle)this.hlayer.removeLayer(this.accCircle); this.accCircle=L.circle([pt.lat,pt.lng],{radius:pt.acc,color:'#C62828',weight:1,fillColor:'#C62828',fillOpacity:.08}).addTo(this.hlayer); }
+    else if(this.accCircle){ this.hlayer.removeLayer(this.accCircle); this.accCircle=null; }
+    this.map.flyTo([pt.lat,pt.lng],14,{duration:.8});
+    this.computeNearest(pt);
+  }
+  async computeNearest(pt){
+    this.setState({searching:true});
+    const cands=this.allHydrants.filter(h=>this.matchFilter(h)).map(h=>({h,d:this.haversine(pt,h)})).sort((a,b)=>a.d-b.d).slice(0,8).map(x=>x.h);
+    let results;
+    try{
+      const coords=[[pt.lng,pt.lat],...cands.map(c=>[c.lng,c.lat])].map(c=>c.join(',')).join(';');
+      const r=await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=distance,duration`);
+      const j=await r.json();
+      results=cands.map((c,i)=>({...c, road:j.distances[0][i+1], dur:j.durations[0][i+1]})).sort((a,b)=>a.road-b.road);
+    }catch(e){
+      results=cands.map(c=>{ const d=this.haversine(pt,c)*1.32; return {...c, road:d, dur:d/11, fb:true}; }).sort((a,b)=>a.road-b.road);
+    }
+    const top=results.slice(0,5);
+    this.setState({nearest:top, searching:false});
+    if(top[0]){ this.selectHydrant(top[0], true); this.drawRoute(pt, top[0]); }
+    this.renderHydrants();
+  }
+  selectHydrant(h, keep){
+    const info = this.state.nearest.find(n=>n.id===h.id);
+    this.setState({selected:{...h, road:info&&info.road, dur:info&&info.dur, fb:info&&info.fb}});
+    if(!keep && this.map) this.map.panTo([h.lat,h.lng]);
+    this.renderHydrants && setTimeout(()=>this.renderHydrants(),0);
+  }
+  async drawRoute(from,to){
+    const L=window.L;
+    if(this.routeLine){ this.hlayer.removeLayer(this.routeLine); this.routeLine=null; }
+    try{
+      const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`);
+      const j=await r.json(); const rt=j.routes[0];
+      const pts=rt.geometry.coordinates.map(c=>[c[1],c[0]]);
+      this.routeLine=L.polyline(pts,{color:'#C62828',weight:5,opacity:.85}).addTo(this.hlayer);
+      this.map.fitBounds(this.routeLine.getBounds(),{padding:[60,60]});
+      this.setState(s=>({selected:{...s.selected, road:rt.distance, dur:rt.duration, fb:false}}));
+    }catch(e){
+      this.routeLine=L.polyline([[from.lat,from.lng],[to.lat,to.lng]],{color:'#C62828',weight:4,dashArray:'8 8',opacity:.7}).addTo(this.hlayer);
+    }
+  }
+  showRoute=()=>{ if(this.state.fire && this.state.selected) this.drawRoute(this.state.fire, this.state.selected); }
+  openNav=()=>{ const h=this.state.selected; if(h) window.open(`https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}&travelmode=driving`,'_blank'); }
+  closeCard=()=>this.setState({selected:null});
+  clearFire=()=>{ if(this.fireMarker)this.hlayer.removeLayer(this.fireMarker); this.fireMarker=null; if(this.accCircle){this.hlayer.removeLayer(this.accCircle);this.accCircle=null;} if(this.routeLine){this.hlayer.removeLayer(this.routeLine);this.routeLine=null;} this.setState({fire:null,selected:null,nearest:[]}); this.renderHydrants(); }
+
+  onAddr=e=>{ const v=e.target.value; this.setState({addrInput:v, notFound:false}); clearTimeout(this._sug); if(v.trim().length<3){ this.setState({suggestions:[]}); return; } this._sug=setTimeout(()=>this.fetchSuggestions(v.trim()),300); }
+  onAddrKey=e=>{ if(e.key==='Enter'){ this.setState({suggestions:[]}); this.geocode(); } }
+  async fetchSuggestions(q){
+    try{
+      const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=si&addressdetails=1&q=${encodeURIComponent(q)}`,{headers:{'Accept-Language':'sl'}});
+      const j=await r.json();
+      if(this.state.addrInput.trim()!==q) return;
+      this.setState({suggestions:j.map(x=>({label:x.display_name, lat:+x.lat, lng:+x.lon}))});
+    }catch(e){ /* suggestions optional */ }
+  }
+  pickSuggestion=s=>()=>{ const short=s.label.split(',').slice(0,2).map(x=>x.trim()).join(' '); this.setState({addrInput:short, suggestions:[], notFound:false}); this.setFire({lat:s.lat, lng:s.lng, label:'Naslov: '+short}); }
+  async geocode(){
+    const q=this.state.addrInput.trim(); if(!q)return;
+    this.setState({searching:true, suggestions:[]});
+    try{
+      let r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=si&q=${encodeURIComponent(q)}`,{headers:{'Accept-Language':'sl'}});
+      let j=await r.json();
+      if(!j[0]){ r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=si&q=${encodeURIComponent(q+', Slovenija')}`,{headers:{'Accept-Language':'sl'}}); j=await r.json(); }
+      if(j[0]){ this.setFire({lat:+j[0].lat,lng:+j[0].lon,label:'Naslov: '+q}); }
+      else this.setState({searching:false, notFound:true});
+    }catch(e){ this.setState({searching:false, notFound:true}); }
+  }
+  toggleFilters=()=>this.setState(s=>({showFilters:!s.showFilters}));
+  setFType=t=>()=>this.setState({fType:t}, ()=>{ this.renderHydrants(); if(this.state.fire)this.computeNearest(this.state.fire); });
+  setFPremer=p=>()=>this.setState({fPremer:p}, ()=>{ this.renderHydrants(); if(this.state.fire)this.computeNearest(this.state.fire); });
+  useMyLocation=()=>{
+    if(!navigator.geolocation) return this.setFire({lat:46.225,lng:14.612,label:'Moja lokacija (privzeta)'});
+    this.setState({searching:true});
+    navigator.geolocation.getCurrentPosition(
+      p=>this.setFire({lat:p.coords.latitude,lng:p.coords.longitude,label:'Moja lokacija',kind:'me',acc:Math.min(p.coords.accuracy||60,200)}),
+      ()=>this.setFire({lat:46.225,lng:14.612,label:'Moja lokacija (privzeta)',kind:'me',acc:80}),
+      {timeout:6000, enableHighAccuracy:true}
+    );
+  }
+
+  // ---------- onboarding ----------
+  slides=[
+    {eyebrow:'Iskanje',title:'V sekundah najdi najbližji hidrant',body:'Ob intervenciji šteje vsaka sekunda. Aplikacija na enem zemljevidu združuje vse hidrante po vsej Sloveniji — nadzemne in podzemne — in ti ob vsakem prikaže premer priključka, pretok v litrih na minuto in tlak. Podatki se sproti dopolnjujejo iz OpenStreetMap, tako da imaš na terenu vedno najbolj svežo sliko.',icon:'search'},
+    {eyebrow:'Trije načini',title:'Naslov, klik na zemljevid ali moja lokacija',body:'Povej, kje gori — na tri načine. Vpiši naslov požara, se dotakni točke na zemljevidu ali z enim gumbom uporabi svojo trenutno lokacijo. Vsi trije načini se stečejo v isto izhodiščno točko, iz katere aplikacija takoj poišče najbližje hidrante in jih razvrsti po dejanski cestni razdalji, ne po zračni črti.',icon:'pin'},
+    {eyebrow:'Ekipa',title:'Navigacija po cestah in skupine za celotno društvo',body:'Do izbranega hidranta ti aplikacija izriše pot po cestah in oceni čas vožnje, z enim dotikom pa odpre navigacijo z glasovnim vodenjem v tvojem telefonu. Vse deluje v okviru skupine tvojega gasilskega društva — s skupnimi vozili, premeri cevi in člani, ki jih lastnik odobri.',icon:'truck'},
+  ];
+  nextSlide=()=>{ if(this.state.slide<2) this.setState(s=>({slide:s.slide+1})); else this.setState({screen:'auth'}); }
+  skipOnboarding=()=>this.setState({screen:'auth'});
+
+  // ---------- auth ----------
+  setLogin=()=>this.setState({authMode:'login'});
+  setRegister=()=>this.setState({authMode:'register'});
+  onEmail=e=>this.setState({email:e.target.value});
+  onPass=e=>this.setState({pass:e.target.value});
+  doAuth=()=>this.setState({screen:'packages'});
+
+  // ---------- packages ----------
+  pickPkg=k=>()=>this.setState({pkg:k});
+  incQty=k=>()=>this.setState(s=>({qty:{...s.qty,[k]:Math.min(k==='large'?100:k==='medium'?50:1, s.qty[k]+1)}}));
+  decQty=k=>()=>this.setState(s=>({qty:{...s.qty,[k]:Math.max(1,s.qty[k]-1)}}));
+  payStripe=()=>this.setState({pay:'stripe'});
+  payInvoice=()=>this.setState({pay:'invoice'});
+  buyContinue=()=>this.setState({screen:'checkout'});
+  guestContinue=()=>this.setState({screen:'join'});
+  onCode=e=>this.setState({code:e.target.value});
+  backToPackages=()=>this.setState({screen:'packages'});
+  payNow=()=>{
+    const map={small:'Mali',medium:'Srednji',large:'Veliki'};
+    const seats={small:1,medium:50,large:100};
+    this.setState({packageLabel:map[this.state.pkg], seatsTotal:seats[this.state.pkg]});
+    if(this.state.pkg==='small'){ this.setState({screen:'app', role:'owner', groupName:'Osebna skupina', tab:'map', members:[{id:'u0',name:'Ti (Janez Novak)',role:'owner'}], requests:[]}); }
+    else this.setState({screen:'groupNew'});
+  }
+
+  // ---------- group create / join ----------
+  onGroupName=e=>this.setState({groupNameInput:e.target.value});
+  createGroup=()=>{ const n=this.state.groupNameInput.trim()||'Novo društvo'; this.setState({screen:'app', role:'owner', groupName:n, tab:'map'}); setTimeout(()=>this.maybeInitMap(),100); }
+  onJoinName=e=>this.setState({joinNameInput:e.target.value});
+  sendRequest=()=>{ this.setState({screen:'waiting', joinNameInput:this.state.joinNameInput.trim()||'PGD Kamnik'}); this._t=setTimeout(()=>{ if(this.state.screen==='waiting') this.simApprove(); },5000); }
+  simApprove=()=>{ clearTimeout(this._t); this.setState({screen:'app', role:'member', packageLabel:'Gost', tab:'map', requests:[]}); setTimeout(()=>this.maybeInitMap(),100); }
+  cancelJoin=()=>{ clearTimeout(this._t); this.setState({screen:'join'}); }
+
+  // ---------- tabs ----------
+  setTab=t=>()=>{ this.setState({tab:t}); if(t==='map'&&this.map) setTimeout(()=>this.map.invalidateSize(),60); }
+
+  // ---------- group management ----------
+  approveReq=id=>()=>{
+    const approved=this.state.members.filter(m=>m.role!=='pending').length;
+    if(approved>=this.state.seatsTotal) return;
+    const r=this.state.requests.find(x=>x.id===id);
+    this.setState(s=>({requests:s.requests.filter(x=>x.id!==id), members:[...s.members,{id:'m'+Date.now(),name:r.name,role:'member'}]}));
+  }
+  rejectReq=id=>()=>this.setState(s=>({requests:s.requests.filter(x=>x.id!==id)}));
+  removeMember=id=>()=>this.setState(s=>({members:s.members.filter(m=>m.id!==id)}));
+  makeAdmin=id=>()=>this.setState(s=>({members:s.members.map(m=>m.id===id?{...m,role:'admin'}:m)}));
+  renameGroup=()=>{ const n=prompt('Novo ime skupine:', this.state.groupName); if(n&&n.trim()) this.setState({groupName:n.trim()}); }
+  setHome=()=>{ this.setState({tab:'map'}); if(this.map){ this.map.setView([46.225,14.612],14); } alert('Na zemljevidu klikni lokacijo gasilskega doma. (V tem prototipu je privzeto Kamnik.)'); }
+
+  // ---------- vehicles ----------
+  onVehName=e=>this.setState({vehNameInput:e.target.value});
+  pickPremer=p=>()=>this.setState({vehPremer:p});
+  addVehicle=()=>{ const n=this.state.vehNameInput.trim(); if(!n)return; this.setState(s=>({vehicles:[...s.vehicles,{id:'v'+Date.now(),name:n,premer:s.vehPremer,active:false}],vehNameInput:''})); }
+  removeVehicle=id=>()=>this.setState(s=>({vehicles:s.vehicles.filter(v=>v.id!==id)}));
+  selectVehicle=id=>()=>this.setState({activeVehicle:id});
+
+  signOut=()=>{ if(this.map){this.map.remove();this.map=null;} this.setState({screen:'onboarding',slide:0,tab:'map',fire:null,selected:null,nearest:[]}); }
+
+  // ---------- derived render values ----------
+  renderVals(){
+    const st=this.state, scr=st.screen;
+    const isOwner = st.role==='owner';
+    const approvedCount = st.members.length;
+    const seatsFull = approvedCount >= st.seatsTotal;
+    const s = this.slides[st.slide]||this.slides[0];
+    const iconFor = k => {
+      const c={ search:'<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+        pin:'<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+        truck:'<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M14 9h4l4 4v4a1 1 0 0 1-1 1h-1"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>' };
+      return this.rawSvg(c[k]);
+    };
+    const dot=(i)=>({ w: i===st.slide?'24px':'6px', c: i===st.slide?'#C62828':'rgba(255,255,255,.25)' });
+
+    // packages
+    const pkgDef=[['small','Mali','1 oseba','4,99 €'],['medium','Srednji','do 50 oseb','14,99 €'],['large','Veliki','do 100 oseb','29,99 €']];
+    const pkgs = pkgDef.map(([k,name,seats,price])=>({
+      name,seats,price, qty:st.qty[k], selected:st.pkg===k,
+      border: st.pkg===k?'#C62828':'#ECEFF2',
+      onPick:this.pickPkg(k), onInc:this.incQty(k), onDec:this.decQty(k),
+    }));
+    const coMap={small:['Mali','4.99'],medium:['Srednji','14.99'],large:['Veliki','29.99']};
+    const coQty=st.qty[st.pkg]; const coPrice=(+coMap[st.pkg][1]*coQty).toFixed(2).replace('.',',')+' €';
+
+    // members
+    const roleMeta={owner:['Lastnik','#C62828'],admin:['Admin','#C62828'],member:['Član','#8A949E']};
+    const initials = n => n.replace(/\(.*\)/,'').trim().split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    const members = st.members.map(m=>({
+      name:m.name, initials:initials(m.name), roleLabel:roleMeta[m.role][0], roleColor:roleMeta[m.role][1],
+      avBg: m.role==='owner'?'#4A1212':'#FCE7E7', avFg: m.role==='owner'?'#fff':'#C62828',
+      canManage: isOwner && m.role!=='owner',
+      onRemove:this.removeMember(m.id), onMakeAdmin:this.makeAdmin(m.id),
+    }));
+    const requests = st.requests.map(r=>({ name:r.name, when:r.when, initials:initials(r.name), onApprove:this.approveReq(r.id), onReject:this.rejectReq(r.id) }));
+
+    // vehicles
+    const vehicles = st.vehicles.map(v=>({
+      name:v.name, premer:v.premer+' mm', active:st.activeVehicle===v.id,
+      border: st.activeVehicle===v.id?'#C62828':'#ECEFF2',
+      iconBg: st.activeVehicle===v.id?'#C62828':'#FCE7E7', iconColor: st.activeVehicle===v.id?'#fff':'#C62828',
+      canManage:isOwner, onSelect:this.selectVehicle(v.id), onRemove:this.removeVehicle(v.id),
+    }));
+    const premerOptions=[75,110,150].map(p=>({ label:p+' mm', onPick:this.pickPremer(p),
+      border:st.vehPremer===p?'#C62828':'#D9DEE3', bg:st.vehPremer===p?'#FCE7E7':'#fff', fg:st.vehPremer===p?'#C62828':'#5C6770' }));
+    const activeVeh = st.vehicles.find(v=>v.id===st.activeVehicle);
+
+    // selected hydrant
+    const sel=st.selected;
+    const fmtDist=d=> d==null?'—':(d>=1000?(d/1000).toFixed(1)+' km':Math.round(d)+' m');
+    const fmtTime=t=> t==null?'—':(t<60?'<1 min':Math.round(t/60)+' min');
+
+    const tabColor=t=> st.tab===t?'#C62828':'#B6BEC6';
+
+    return {
+      statusColor: (scr==='onboarding'||scr==='waiting')?'#fff':'#4A1212',
+      isOnboarding: scr==='onboarding', isAuth: scr==='auth', isPackages: scr==='packages',
+      isCheckout: scr==='checkout', isGroupNew: scr==='groupNew', isJoin: scr==='join',
+      isWaiting: scr==='waiting', inApp: scr==='app',
+
+      // onboarding
+      slideKey:'s'+st.slide, slideIcon:iconFor(s.icon), slideEyebrow:s.eyebrow, slideTitle:s.title, slideBody:s.body,
+      slideDots:[dot(0),dot(1),dot(2)], onboardCta: st.slide<2?'Naprej':'Začni',
+
+      // auth
+      authTitle: st.authMode==='login'?'Prijava':'Registracija',
+      email:st.email, pass:st.pass, onEmail:this.onEmail, onPass:this.onPass,
+      setLogin:this.setLogin, setRegister:this.setRegister, doAuth:this.doAuth,
+      loginBg: st.authMode==='login'?'#4A1212':'#fff', loginFg: st.authMode==='login'?'#fff':'#5C6770', loginBorder: st.authMode==='login'?'#4A1212':'#D9DEE3',
+      regBg: st.authMode==='register'?'#4A1212':'#fff', regFg: st.authMode==='register'?'#fff':'#5C6770', regBorder: st.authMode==='register'?'#4A1212':'#D9DEE3',
+      skipOnboarding:this.skipOnboarding, nextSlide:this.nextSlide,
+
+      // packages
+      pkgs, payStripe:this.payStripe, payInvoice:this.payInvoice, buyContinue:this.buyContinue, guestContinue:this.guestContinue,
+      stripeBg: st.pay==='stripe'?'#FCE7E7':'#fff', stripeFg: st.pay==='stripe'?'#C62828':'#5C6770', stripeBorder: st.pay==='stripe'?'#C62828':'#D9DEE3',
+      invBg: st.pay==='invoice'?'#FCE7E7':'#fff', invFg: st.pay==='invoice'?'#C62828':'#5C6770', invBorder: st.pay==='invoice'?'#C62828':'#D9DEE3',
+
+      // checkout
+      checkoutTitle: st.pay==='stripe'?'Plačilo s kartico':'Plačilo po predračunu',
+      coPkgName: coMap[st.pkg][0], coQty, coPrice, isStripe: st.pay==='stripe', isInvoice: st.pay==='invoice',
+      code:st.code, onCode:this.onCode, payNow:this.payNow, backToPackages:this.backToPackages,
+
+      // group create/join/wait
+      groupNameInput:st.groupNameInput, onGroupName:this.onGroupName, createGroup:this.createGroup,
+      joinNameInput:st.joinNameInput, onJoinName:this.onJoinName, sendRequest:this.sendRequest,
+      simApprove:this.simApprove, cancelJoin:this.cancelJoin,
+
+      // app shell tabs
+      mapDisplay: st.tab==='map'?'flex':'none', skupinaDisplay: st.tab==='skupina'?'flex':'none',
+      vozilaDisplay: st.tab==='vozila'?'flex':'none', profilDisplay: st.tab==='profil'?'flex':'none',
+      tabMap:this.setTab('map'), tabSkupina:this.setTab('skupina'), tabVozila:this.setTab('vozila'), tabProfil:this.setTab('profil'),
+      mapTabColor:tabColor('map'), skupinaTabColor:tabColor('skupina'), vozilaTabColor:tabColor('vozila'), profilTabColor:tabColor('profil'),
+
+      // map
+      addrInput:st.addrInput, onAddr:this.onAddr, onAddrKey:this.onAddrKey, searching:st.searching,
+      runGeocode:()=>this.geocode(), hasSuggestions: st.suggestions.length>0,
+      suggestions: st.suggestions.map(s=>({ label:s.label.split(',').slice(0,3).join(', '), onPick:this.pickSuggestion(s) })),
+      notFound: st.notFound,
+      useMyLocation:this.useMyLocation,
+      hydrantCount:(this.allHydrants?this.allHydrants.filter(h=>this.matchFilter(h)).length:0),
+      showFilters:st.showFilters, toggleFilters:this.toggleFilters,
+      filterBtnBg: (st.showFilters||st.fType!=='vsi'||st.fPremer!=='vsi')?'#C62828':'#fff',
+      filterBtnFg: (st.showFilters||st.fType!=='vsi'||st.fPremer!=='vsi')?'#fff':'#4A1212',
+      fTypeVsi: this.chipStyle(st.fType==='vsi'), fTypeNad: this.chipStyle(st.fType==='nadzemni'), fTypePod: this.chipStyle(st.fType==='podzemni'),
+      fPVsi: this.chipStyle(st.fPremer==='vsi'), fP80: this.chipStyle(st.fPremer===80), fP100: this.chipStyle(st.fPremer===100), fP150: this.chipStyle(st.fPremer===150),
+      setTypeVsi:this.setFType('vsi'), setTypeNad:this.setFType('nadzemni'), setTypePod:this.setFType('podzemni'),
+      setP0:this.setFPremer('vsi'), setP80:this.setFPremer(80), setP100:this.setFPremer(100), setP150:this.setFPremer(150),
+      activeVehicleLabel: activeVeh?activeVeh.name+' · '+activeVeh.premer+' mm':'Brez vozila',
+      hasFire: !!st.fire, fireMsg: st.fire? (st.fire.label+' — najbližji hidrant '+fmtDist(st.nearest[0]&&st.nearest[0].road)) : '', clearFire:this.clearFire,
+
+      // selected sheet
+      hasSelected: !!sel,
+      selTypeLabel: sel? (sel.type==='nadzemni'?'Nadzemni hidrant':'Podzemni hidrant'):'',
+      selSubtitle: sel? (sel.town? sel.town : 'Hidrant')+' · '+(sel.fb?'ocena':'OSRM'):'',
+      selDesc: sel? (sel.type==='nadzemni'
+        ? 'Nadzemni hidrant — stebriček nad tlemi, dobro viden in hiter za priklop cevi.'
+        : 'Podzemni hidrant — v jašku pod pokrovom v tlaku, za priklop potrebuješ podzemni nastavek.') : '',
+      selTypeColor: sel? (sel.type==='nadzemni'?'#C62828':'#E57373'):'#C62828',
+      selTypeBg:'#FCE7E7',
+      selPremer: sel? (sel.premer!=null?sel.premer+' mm':'ni podatka'):'', selPretok: sel? (sel.pretok!=null?sel.pretok+' l/min':'ni podatka'):'', selTlak: sel? (sel.tlak!=null?sel.tlak+' bar':'ni podatka'):'',
+      selHasRoute: !!(sel && sel.road!=null),
+      selRoadDist: fmtDist(sel&&sel.road), selRoadTime: fmtTime(sel&&sel.dur),
+      showRoute:this.showRoute, openNav:this.openNav, closeCard:this.closeCard,
+
+      // skupina
+      groupName:st.groupName, roleLabel: isOwner?'Lastnik':(st.role==='admin'?'Admin':'Član'),
+      seatsLabel: approvedCount+'/'+st.seatsTotal, isOwner,
+      hasRequests: isOwner && st.requests.length>0, requestCount: st.requests.length, requests,
+      seatsFull, approveBg: seatsFull?'#B6BEC6':'#C62828',
+      members, memberCount: st.members.length, renameGroup:this.renameGroup, setHome:this.setHome,
+
+      // vozila
+      vehicles, vehNameInput:st.vehNameInput, onVehName:this.onVehName, premerOptions, addVehicle:this.addVehicle,
+
+      // profil
+      myName:'Janez Novak', myInitials:'JN', packageLabel:st.packageLabel, signOut:this.signOut,
+    };
+  }
+  chipStyle(active){ return active
+    ? 'background:#C62828;color:#fff;border:1px solid #C62828;'
+    : 'background:#fff;color:#5C6770;border:1px solid #D9DEE3;'; }
+  rawSvg(html){ return React.createElement('span',{dangerouslySetInnerHTML:{__html:html}}); }
+}
+</script>
+</body>
+</html>
