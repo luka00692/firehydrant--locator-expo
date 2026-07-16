@@ -8,6 +8,7 @@
   "scripts": {
     "import": "node scripts/importHydrants.js",
     "seed": "node scripts/seedTestData.js",
+    "generate-test-data": "node scripts/generateTestData.js",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\""
   },
   "dependencies": {
