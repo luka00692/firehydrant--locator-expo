@@ -35,8 +35,9 @@ Hydrants:
 - `POST /api/hydrants/:id/report` — flag a hydrant's data as wrong/missing (body: `{ "sporocilo": "..." }`)
 
 Auth (see [Auth](#auth) below):
-- `POST /api/auth/register` — body `{ email, uporabnisko_ime }` → creates the
-  account on first use, returns `{ user, token }`
+- `POST /api/auth/register` — body `{ email, uporabniskoIme }` → creates the
+  account on first use, returns `{ user, token, expiresAt }` where `user` is
+  `{ id, email, uporabniskoIme, nacinPrijave, createdAt }`
 - `GET /api/auth/session` — `Authorization: Bearer <token>` → `{ user }`
 
 Payments (see [Payments](#payments) below):

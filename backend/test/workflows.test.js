@@ -38,7 +38,7 @@ beforeEach(async () => {
 
 async function registerUser(email, uporabnisko_ime) {
   const res = createMockRes();
-  await registerHandler({ method: 'POST', body: { email, uporabnisko_ime } }, res);
+  await registerHandler({ method: 'POST', body: { email, uporabniskoIme: uporabnisko_ime } }, res);
   return res.body; // { user, token, expiresAt }
 }
 

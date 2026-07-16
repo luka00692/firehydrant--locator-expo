@@ -1,5 +1,5 @@
 const { applyCors } = require('../../lib/cors');
-const { getUserFromRequest } = require('../../lib/auth');
+const { getUserFromRequest, toPublicUser } = require('../../lib/auth');
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -7,5 +7,5 @@ module.exports = async function handler(req, res) {
 
   const user = await getUserFromRequest(req);
   if (!user) return res.status(401).json({ error: 'unauthorized' });
-  res.status(200).json({ user });
+  res.status(200).json({ user: toPublicUser(user) });
 };

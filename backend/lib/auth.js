@@ -39,4 +39,18 @@ async function requireAuth(req, res) {
   return user;
 }
 
-module.exports = { createSession, getUserFromRequest, requireAuth };
+// The internal user object stays snake_case (matches DB columns, used as
+// `user.uporabnisko_ime` etc. throughout handlers) — only camelCase it when
+// actually serializing into an HTTP response, for consistency with the rest
+// of the API's response shapes.
+function toPublicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    uporabniskoIme: user.uporabnisko_ime,
+    nacinPrijave: user.nacin_prijave,
+    createdAt: user.created_at
+  };
+}
+
+module.exports = { createSession, getUserFromRequest, requireAuth, toPublicUser };
