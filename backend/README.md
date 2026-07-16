@@ -53,7 +53,8 @@ Groups / teams (auth required on all of these; `vloga` is `"admin"` or
 - `GET /api/groups/:id` / `PATCH /api/groups/:id` — admin-only; body
   `{ ime?, lokacijaDoma?: { lat, lng } }` / `DELETE /api/groups/:id` — admin-only
 - `POST /api/groups/join` — body `{ imeSkupine }` → pending (`member`) join
-  request
+  request / `GET /api/groups/join?imeSkupine=` — the caller polls their own
+  request's status (`pending`/`approved`/`rejected`), `404` if none exists
 - `GET /api/groups/:id/requests` — admin-only, lists pending join requests
 - `GET|POST /api/groups/:id/vehicles` — any approved member can list, only an
   admin can add (body `{ ime, premerCevi }`)

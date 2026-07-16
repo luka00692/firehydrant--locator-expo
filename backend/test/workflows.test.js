@@ -248,6 +248,33 @@ test('A member cannot approve or remove other members', async () => {
   assert.equal(forbiddenRes.statusCode, 403);
 });
 
+test('GET /api/groups/join lets the caller poll their own request status', async () => {
+  const { ownerToken, group } = await createGroup('joinpoll@example.com', 'joinpoll', 2);
+  const { token: guestToken } = await registerUser('guestpoll@example.com', 'guestpoll');
+
+  const notFoundRes = createMockRes();
+  await groupJoinHandler(authedReq(guestToken, { method: 'GET', query: { imeSkupine: group.ime } }), notFoundRes);
+  assert.equal(notFoundRes.statusCode, 404);
+
+  const joinRes = createMockRes();
+  await groupJoinHandler(authedReq(guestToken, { method: 'POST', body: { imeSkupine: group.ime } }), joinRes);
+
+  const pollPendingRes = createMockRes();
+  await groupJoinHandler(authedReq(guestToken, { method: 'GET', query: { imeSkupine: group.ime } }), pollPendingRes);
+  assert.equal(pollPendingRes.statusCode, 200);
+  assert.equal(pollPendingRes.body.status, 'pending');
+
+  await membershipHandler(
+    authedReq(ownerToken, { method: 'PATCH', query: { id: joinRes.body.id }, body: { status: 'approved' } }),
+    createMockRes()
+  );
+
+  const pollApprovedRes = createMockRes();
+  await groupJoinHandler(authedReq(guestToken, { method: 'GET', query: { imeSkupine: group.ime } }), pollApprovedRes);
+  assert.equal(pollApprovedRes.statusCode, 200);
+  assert.equal(pollApprovedRes.body.status, 'approved');
+});
+
 test('Admin can promote a member to admin', async () => {
   const { ownerToken, group } = await createGroup('promote@example.com', 'promote', 3);
   const { token: memberToken } = await registerUser('promoted-member@example.com', 'promoted-member');

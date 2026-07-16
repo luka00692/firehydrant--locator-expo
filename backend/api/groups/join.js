@@ -7,21 +7,41 @@ const { sendPushNotification } = require('../../lib/push');
 const MEMBERSHIP_FIELDS = `id, uporabnik_id AS "uporabnikId", skupina_id AS "skupinaId", vloga, status,
   created_at AS "createdAt"`;
 
-// A guest requests to join a group by name. The membership row lands in
-// 'pending' — the group's admin approves/rejects it via
-// PATCH/DELETE /api/memberships/:id.
 module.exports = async function handler(req, res) {
   applyCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
 
   const user = await requireAuth(req, res);
   if (!user) return;
 
+  const pool = getPool();
+
+  // Lets a guest poll their own join request's status (pending/approved/rejected)
+  // by group name — e.g. from a "waiting for approval" screen.
+  if (req.method === 'GET') {
+    const imeSkupine = req.query.imeSkupine;
+    if (!imeSkupine) return res.status(400).json({ error: 'imeSkupine is required' });
+
+    const { rows } = await pool.query(
+      `SELECT c.id, c.uporabnik_id AS "uporabnikId", c.skupina_id AS "skupinaId", c.vloga, c.status,
+              c.created_at AS "createdAt"
+       FROM clanstvo c
+       JOIN skupina s ON s.id = c.skupina_id
+       WHERE c.uporabnik_id = $1 AND s.ime = $2`,
+      [user.id, imeSkupine]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'no membership request found for that group' });
+    return res.status(200).json(rows[0]);
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
+
+  // A guest requests to join a group by name. The membership row lands in
+  // 'pending' — the group's admin approves/rejects it via
+  // PATCH/DELETE /api/memberships/:id.
   const { imeSkupine } = req.body || {};
   if (!imeSkupine) return res.status(400).json({ error: 'imeSkupine is required' });
 
-  const pool = getPool();
   const { rows: groups } = await pool.query(`SELECT * FROM skupina WHERE ime = $1`, [imeSkupine]);
   const group = groups[0];
   if (!group) return res.status(404).json({ error: 'group not found' });
