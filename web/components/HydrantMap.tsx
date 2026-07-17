@@ -10,18 +10,36 @@ export interface FirePoint {
   lng: number;
 }
 
+// NOTE: the zoom threshold that gates hydrant rendering lives in MapTab
+// (MIN_HYDRANT_ZOOM = 12). It is intentionally not exported from here — this
+// module imports Leaflet, which touches `window` at import time, so pulling a
+// value out of it into the server-rendered MapTab would break SSR/prerender.
+
 function hydrantType(h: Hydrant): 'nadzemni' | 'podzemni' {
   const t = h.properties['fire_hydrant:type'];
   return t === 'underground' || h.properties['fire_hydrant:position'] === 'underground' ? 'podzemni' : 'nadzemni';
 }
 
+// divIcons parse an SVG string into DOM each time they're built, so cache one
+// instance per (color,size) and reuse it across every marker that needs it.
+const iconCache = new Map<string, L.DivIcon>();
 function hydrantIcon(color: string, size: number) {
-  return L.divIcon({
+  const key = `${color}:${size}`;
+  const cached = iconCache.get(key);
+  if (cached) return cached;
+  const icon = L.divIcon({
     className: 'hpin',
     iconSize: [size, size],
     iconAnchor: [size / 2, size],
     html: `<svg width="${size}" height="${size * 1.25}" viewBox="0 0 24 30"><path d="M12 0C6 0 1.5 4.5 1.5 10.5 1.5 18 12 30 12 30S22.5 18 22.5 10.5C22.5 4.5 18 0 12 0z" fill="${color}"/><circle cx="12" cy="10.5" r="4" fill="#fff"/></svg>`
   });
+  iconCache.set(key, icon);
+  return icon;
+}
+
+function iconFor(h: Hydrant, selected: boolean) {
+  const color = selected ? '#4A1212' : hydrantType(h) === 'nadzemni' ? '#C62828' : '#E57373';
+  return hydrantIcon(color, selected ? 26 : 18);
 }
 
 function fireIcon() {
@@ -49,7 +67,7 @@ interface Props {
   routeCoordinates: [number, number][] | null;
   onHydrantClick: (h: Hydrant) => void;
   onMapClick: (pt: FirePoint) => void;
-  onBoundsChange: (bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number }) => void;
+  onBoundsChange: (bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number; zoom: number }) => void;
 }
 
 export default function HydrantMap({
@@ -64,9 +82,16 @@ export default function HydrantMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const hydrantLayerRef = useRef<L.LayerGroup | null>(null);
+  const overlayLayerRef = useRef<L.LayerGroup | null>(null);
   const fireMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
+
+  // hydrant markers kept keyed by id so we can diff (add/remove only the delta)
+  // instead of tearing down and rebuilding the whole layer on every change.
+  const markersRef = useRef<Map<number, L.Marker>>(new Map());
+  const hydrantByIdRef = useRef<Map<number, Hydrant>>(new Map());
+  const selectedIdRef = useRef<number | null>(selectedHydrantId);
 
   // callbacks captured in refs so the map-init effect doesn't need to re-run
   const onHydrantClickRef = useRef(onHydrantClick);
@@ -81,19 +106,30 @@ export default function HydrantMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     let cancelled = false;
+    const markers = markersRef.current;
+    const hydrantById = hydrantByIdRef.current;
     const map = L.map(containerRef.current, { zoomControl: false, attributionControl: false }).setView(
       [46.15, 14.99],
       8
     );
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
+    // Hydrants live in their own layer; the fire pin / route / accuracy circle
+    // live in a separate overlay so refreshing hydrants never wipes them.
     hydrantLayerRef.current = L.layerGroup().addTo(map);
+    overlayLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
     map.on('click', (e) => onMapClickRef.current({ lat: e.latlng.lat, lng: e.latlng.lng }));
     const emitBounds = () => {
       const b = map.getBounds();
-      onBoundsChangeRef.current({ minLat: b.getSouth(), minLon: b.getWest(), maxLat: b.getNorth(), maxLon: b.getEast() });
+      onBoundsChangeRef.current({
+        minLat: b.getSouth(),
+        minLon: b.getWest(),
+        maxLat: b.getNorth(),
+        maxLon: b.getEast(),
+        zoom: map.getZoom()
+      });
     };
     map.on('moveend', emitBounds);
     const timer = setTimeout(() => {
@@ -109,27 +145,64 @@ export default function HydrantMap({
       clearTimeout(timer);
       map.remove();
       mapRef.current = null;
+      markers.clear();
+      hydrantById.clear();
     };
   }, []);
 
-  // hydrant markers
+  // hydrant markers — diff against what's already drawn
   useEffect(() => {
     const layer = hydrantLayerRef.current;
     if (!layer) return;
-    layer.clearLayers();
-    hydrants.forEach((h) => {
-      const isSelected = h.id === selectedHydrantId;
-      const color = isSelected ? '#4A1212' : hydrantType(h) === 'nadzemni' ? '#C62828' : '#E57373';
-      const marker = L.marker([h.lat, h.lon], { icon: hydrantIcon(color, isSelected ? 26 : 18) });
-      marker.on('click', () => onHydrantClickRef.current(h));
+    const markers = markersRef.current;
+    const byId = hydrantByIdRef.current;
+
+    const nextIds = new Set<number>();
+    for (const h of hydrants) nextIds.add(h.id);
+
+    // remove markers that left the viewport / filter
+    for (const [id, marker] of markers) {
+      if (!nextIds.has(id)) {
+        layer.removeLayer(marker);
+        markers.delete(id);
+        byId.delete(id);
+      }
+    }
+
+    // add markers that are newly present
+    for (const h of hydrants) {
+      byId.set(h.id, h);
+      if (markers.has(h.id)) continue;
+      const marker = L.marker([h.lat, h.lon], { icon: iconFor(h, h.id === selectedIdRef.current) });
+      marker.on('click', () => onHydrantClickRef.current(hydrantByIdRef.current.get(h.id) ?? h));
       marker.addTo(layer);
-    });
-  }, [hydrants, selectedHydrantId]);
+      markers.set(h.id, marker);
+    }
+  }, [hydrants]);
+
+  // selection highlight — recolor only the two affected markers
+  useEffect(() => {
+    const markers = markersRef.current;
+    const byId = hydrantByIdRef.current;
+    const prev = selectedIdRef.current;
+    selectedIdRef.current = selectedHydrantId;
+
+    if (prev != null && prev !== selectedHydrantId) {
+      const m = markers.get(prev);
+      const h = byId.get(prev);
+      if (m && h) m.setIcon(iconFor(h, false));
+    }
+    if (selectedHydrantId != null) {
+      const m = markers.get(selectedHydrantId);
+      const h = byId.get(selectedHydrantId);
+      if (m && h) m.setIcon(iconFor(h, true));
+    }
+  }, [selectedHydrantId]);
 
   // fire / me marker
   useEffect(() => {
     const map = mapRef.current;
-    const layer = hydrantLayerRef.current;
+    const layer = overlayLayerRef.current;
     if (!map || !layer) return;
 
     if (fireMarkerRef.current) {
@@ -163,7 +236,7 @@ export default function HydrantMap({
   // route polyline
   useEffect(() => {
     const map = mapRef.current;
-    const layer = hydrantLayerRef.current;
+    const layer = overlayLayerRef.current;
     if (!map || !layer) return;
 
     if (routeLineRef.current) {
