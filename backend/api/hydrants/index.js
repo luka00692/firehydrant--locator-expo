@@ -28,6 +28,17 @@ module.exports = async function handler(req, res) {
     }
   }
 
+  // Full dataset in one request (?all=1) so the client can show every hydrant
+  // at once via clustering. Slovenia's hydrant set is bounded in size, so this
+  // is safe to return without a viewport filter.
+  if (req.query.all !== undefined) {
+    const { rows } = await getPool().query(
+      `SELECT id, ST_Y(geom::geometry) AS lat, ST_X(geom::geometry) AS lon, properties
+       FROM hydrants`
+    );
+    return res.status(200).json(rows);
+  }
+
   const { minLat, minLon, maxLat, maxLon } = req.query;
   if ([minLat, minLon, maxLat, maxLon].some((v) => v === undefined)) {
     return res.status(400).json({ error: 'minLat, minLon, maxLat, maxLon are required' });

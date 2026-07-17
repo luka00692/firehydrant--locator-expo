@@ -117,6 +117,9 @@ export const api = {
   removeVehicle: (groupId: string, id: string) =>
     request<void>(`/api/groups/${groupId}/vehicles?vehicleId=${id}`, { method: 'DELETE' }),
 
+  // Every hydrant in the dataset, in one request — the map renders them all at
+  // once with clustering rather than refetching per viewport.
+  allHydrants: () => request<Hydrant[]>('/api/hydrants?all=1'),
   hydrantsInBounds: (bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number }) =>
     request<Hydrant[]>(
       `/api/hydrants?minLat=${bounds.minLat}&minLon=${bounds.minLon}&maxLat=${bounds.maxLat}&maxLon=${bounds.maxLon}`
