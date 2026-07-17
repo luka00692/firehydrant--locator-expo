@@ -15,6 +15,36 @@ module.exports = async function handler(req, res) {
 
   const pool = getPool();
   const groupId = req.query.id;
+  const { vehicleId } = req.query;
+
+  // PATCH/DELETE target a specific vehicle (?vehicleId=...) — folded in here
+  // (rather than a separate /api/vehicles/:id route) to keep the Hobby
+  // plan's 12-function deploy cap, see backend/README.md TODO.
+  if (vehicleId && (req.method === 'PATCH' || req.method === 'DELETE')) {
+    const { rows: existing } = await pool.query(`SELECT skupina_id FROM vozilo WHERE id = $1`, [vehicleId]);
+    if (!existing[0] || existing[0].skupina_id !== groupId) return res.status(404).json({ error: 'not found' });
+
+    const membership = await requireRole(res, user.id, groupId, ['admin']);
+    if (!membership) return;
+
+    if (req.method === 'DELETE') {
+      await pool.query(`DELETE FROM vozilo WHERE id = $1`, [vehicleId]);
+      return res.status(204).end();
+    }
+
+    const { ime, premerCevi } = req.body || {};
+    try {
+      const { rows: updated } = await pool.query(
+        `UPDATE vozilo SET ime = COALESCE($1, ime), premer_cevi = COALESCE($2, premer_cevi)
+         WHERE id = $3 RETURNING ${VEHICLE_FIELDS}`,
+        [ime || null, premerCevi || null, vehicleId]
+      );
+      return res.status(200).json(updated[0]);
+    } catch (err) {
+      if (respondIfDbError(res, err)) return;
+      throw err;
+    }
+  }
 
   if (req.method === 'POST') {
     const membership = await requireRole(res, user.id, groupId, ['admin']);

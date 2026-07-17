@@ -30,7 +30,7 @@ export default function VehiclesTab() {
 
   async function removeVehicle(id: string) {
     if (!group) return;
-    await api.removeVehicle(id);
+    await api.removeVehicle(group.id, id);
     await refreshVehicles(group.id);
   }
 

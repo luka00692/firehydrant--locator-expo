@@ -94,9 +94,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ime, premerCevi })
     }),
-  updateVehicle: (id: string, patch: { ime?: string; premerCevi?: number }) =>
-    request<Vehicle>(`/api/vehicles/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  removeVehicle: (id: string) => request<void>(`/api/vehicles/${id}`, { method: 'DELETE' }),
+  updateVehicle: (groupId: string, id: string, patch: { ime?: string; premerCevi?: number }) =>
+    request<Vehicle>(`/api/groups/${groupId}/vehicles?vehicleId=${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch)
+    }),
+  removeVehicle: (groupId: string, id: string) =>
+    request<void>(`/api/groups/${groupId}/vehicles?vehicleId=${id}`, { method: 'DELETE' }),
 
   hydrantsInBounds: (bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number }) =>
     request<Hydrant[]>(
