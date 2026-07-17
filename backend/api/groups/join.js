@@ -36,9 +36,11 @@ module.exports = async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
 
-  // A guest requests to join a group by name. The membership row lands in
-  // 'pending' — the group's admin approves/rejects it via
-  // PATCH/DELETE /api/memberships/:id.
+  // A guest requests to join a group by name. TEMPORARY: auto-approved on
+  // creation (rather than landing in 'pending' for admin review via
+  // PATCH/DELETE /api/memberships/:id) since that approval endpoint is
+  // currently excluded from the deploy (see backend/README.md TODO). Revert
+  // to 'pending' once route consolidation restores /api/memberships/:id.
   const { imeSkupine } = req.body || {};
   if (!imeSkupine) return res.status(400).json({ error: 'imeSkupine is required' });
 
@@ -49,7 +51,7 @@ module.exports = async function handler(req, res) {
   try {
     const { rows } = await pool.query(
       `INSERT INTO clanstvo (uporabnik_id, skupina_id, vloga, status)
-       VALUES ($1, $2, 'member', 'pending') RETURNING ${MEMBERSHIP_FIELDS}`,
+       VALUES ($1, $2, 'member', 'approved') RETURNING ${MEMBERSHIP_FIELDS}`,
       [user.id, group.id]
     );
 
@@ -63,8 +65,8 @@ module.exports = async function handler(req, res) {
       owners.map((owner) =>
         sendPushNotification(
           owner.push_token,
-          'Nova prošnja za pridružitev',
-          `${user.uporabnisko_ime} želi pridružiti skupini ${group.ime}.`,
+          'Nov član skupine',
+          `${user.uporabnisko_ime} se je pridružil skupini ${group.ime}.`,
           { skupinaId: group.id }
         )
       )
