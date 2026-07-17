@@ -65,6 +65,8 @@ export interface NearestHydrantResult {
     /** Road driving time in seconds; null when only a straight-line fallback is available. */
     duration: number | null;
     coordinates?: [number, number][];
+    /** Basic turn-by-turn instructions from OSRM; absent for the straight-line fallback. */
+    steps?: { text: string; distance: number }[];
     /** true when OSRM road routing was unavailable and this is a direct-line fallback. */
     straightLine?: boolean;
   } | null;
