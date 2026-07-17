@@ -6,9 +6,9 @@ import { api, ApiRequestError } from '@/lib/api';
 import type { PaketTip } from '@/lib/types';
 
 const PACKAGE_DEFS: { tip: PaketTip; name: string; seatsLabel: string; price: string; minQty: number; maxQty: number }[] = [
-  { tip: 'osnovni', name: 'Mali', seatsLabel: '1–50 oseb', price: '4,99 €', minQty: 1, maxQty: 50 },
-  { tip: 'napredni', name: 'Srednji', seatsLabel: '50–100 oseb', price: '14,99 €', minQty: 50, maxQty: 100 },
-  { tip: 'premium', name: 'Veliki', seatsLabel: '100–200 oseb', price: '24,99 €', minQty: 100, maxQty: 200 }
+  { tip: 'osnovni', name: 'Mali', seatsLabel: '50 oseb', price: '4,99 €', minQty: 50, maxQty: 50 },
+  { tip: 'napredni', name: 'Srednji', seatsLabel: '100 oseb', price: '14,99 €', minQty: 100, maxQty: 100 },
+  { tip: 'premium', name: 'Veliki', seatsLabel: '200 oseb', price: '24,99 €', minQty: 200, maxQty: 200 }
 ];
 
 const PAYMENT_METHODS = [

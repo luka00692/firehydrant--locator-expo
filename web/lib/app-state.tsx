@@ -44,7 +44,7 @@ interface AppActions {
 const AppStateContext = createContext<(AppState & AppActions) | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [screen, setScreen] = useState<Screen>('onboarding');
+  const [screen, setScreenState] = useState<Screen>('onboarding');
   const [tab, setTab] = useState<Tab>('map');
   const [user, setUser] = useState<User | null>(null);
   const [group, setGroup] = useState<Group | null>(null);
@@ -52,9 +52,34 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [activeVehicleId, setActiveVehicleId] = useState<string | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<{ tip: PaketTip; qty: number }>({
     tip: 'napredni',
-    qty: 50
+    qty: 100
   });
   const [pendingGroupName, setPendingGroupName] = useState('');
+
+  // Every screen transition pushes a browser history entry, so back/forward
+  // actually walk through the app's screens instead of doing nothing (the
+  // popstate handler below applies the state without re-pushing, so pressing
+  // back doesn't turn around and push a new forward entry).
+  const poppingRef = useRef(false);
+  const setScreen = useCallback((next: Screen) => {
+    setScreenState(next);
+    if (!poppingRef.current && typeof window !== 'undefined') {
+      window.history.pushState({ screen: next }, '', `?screen=${next}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.history.replaceState({ screen: 'onboarding' }, '', `${window.location.pathname}?screen=onboarding`);
+    function onPopState(e: PopStateEvent) {
+      const next = (e.state as { screen?: Screen } | null)?.screen ?? 'onboarding';
+      poppingRef.current = true;
+      setScreenState(next);
+      poppingRef.current = false;
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const refreshGroup = useCallback(async (): Promise<Group | null> => {
     const groups = await api.myGroups();

@@ -126,12 +126,12 @@ test('POST /api/groups {fakePurchase} records a paket without real payment', asy
   const { token } = await registerUser('fakebuyer@gmail.com', 'fakebuyer');
   const res = createMockRes();
   await groupsHandler(
-    authedReq(token, { method: 'POST', body: { fakePurchase: { tip: 'napredni', stSedezev: 50 } } }),
+    authedReq(token, { method: 'POST', body: { fakePurchase: { tip: 'napredni', stSedezev: 100 } } }),
     res
   );
   assert.equal(res.statusCode, 201);
   assert.equal(res.body.tip, 'napredni');
-  assert.equal(res.body.stSedezev, 50);
+  assert.equal(res.body.stSedezev, 100);
 });
 
 test('POST /api/groups {fakePurchase} rejects an out-of-range seat count', async () => {
