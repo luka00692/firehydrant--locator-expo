@@ -24,10 +24,14 @@ function formatDistance(m: number | undefined | null) {
 
 function formatDuration(s: number | undefined | null) {
   if (s == null) return '—';
-  // A very short road route (e.g. across the street) still realistically
-  // takes a fire truck at least a minute to actually respond — never show
-  // less than that, matching src/hydrantUtils.js's formatMinutes.
-  return `${Math.max(1, Math.round(s / 60))} min`;
+  // A very short road route (e.g. across the street) still realistically takes
+  // a fire truck at least a minute to respond — never show less, matching
+  // src/hydrantUtils.js's formatMinutes. Longer routes roll over into hours.
+  const mins = Math.max(1, Math.round(s / 60));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
 }
 
 // Great-circle distance in metres — used to debounce live-tracking re-searches
@@ -475,9 +479,12 @@ export default function MapTab() {
               <div className="flex gap-3.5 bg-[#FCE7E7] rounded-[10px] px-3.5 py-3 mb-4">
                 <div>
                   <div className="text-[11px] text-[#E57373] uppercase tracking-wide">
-                    {nearest.route.straightLine ? 'Zračna razdalja' : 'Po cestah'}
+                    {nearest.route.straightLine ? 'Zračna razdalja (približno)' : 'Po cestah'}
                   </div>
-                  <div className="text-base font-bold text-[#8E1616]">{formatDistance(nearest.route.distance)}</div>
+                  <div className="text-base font-bold text-[#8E1616]">
+                    {nearest.route.straightLine ? '≈ ' : ''}
+                    {formatDistance(nearest.route.distance)}
+                  </div>
                 </div>
                 {nearest.route.duration != null && (
                   <div>
