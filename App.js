@@ -6,6 +6,7 @@ import { MapView, Marker, Polyline } from './src/Map';
 import CitySearchBar from './src/CitySearchBar';
 import HydrantInfoCard from './src/HydrantInfoCard';
 import Legend from './src/Legend';
+import PasswordCrackLab from './src/PasswordCrackLab';
 import cityData from './src/data/cities.json';
 import { fetchHydrantsInBounds, fetchNearestHydrant } from './src/api';
 import { GOOGLE_MAPS_API_KEY } from './src/config';
@@ -85,6 +86,7 @@ export default function App() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState(null);
   const [statusMessage, setStatusMessage] = useState('Loading hydrants…');
+  const [passwordLabVisible, setPasswordLabVisible] = useState(false);
 
   async function loadHydrants(region) {
     try {
@@ -231,6 +233,9 @@ export default function App() {
           <Pressable style={[styles.btn, locating && styles.btnActive]} onPress={handleLocateMe}>
             <Text style={styles.btnText}>{locating ? 'Locating…' : 'Locate me'}</Text>
           </Pressable>
+          <Pressable style={styles.btn} onPress={() => setPasswordLabVisible(true)}>
+            <Text style={styles.btnText}>Password Lab</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -299,6 +304,8 @@ export default function App() {
           setRouteInfo(null);
         }}
       />
+
+      <PasswordCrackLab visible={passwordLabVisible} onClose={() => setPasswordLabVisible(false)} />
     </SafeAreaView>
   );
 }
