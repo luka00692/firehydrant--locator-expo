@@ -50,7 +50,7 @@ async function registerUser(email, uporabnisko_ime) {
 }
 
 test('POST /api/checkout 503s when Stripe is not configured', async () => {
-  const { token } = await registerUser('nopay@example.com', 'nopay');
+  const { token } = await registerUser('nopay@gmail.com', 'nopay');
   const res = createMockRes();
   const payload = JSON.stringify({ tip: 'osnovni', st_sedezev: 1 });
   await checkoutHandler(mockReqWithBody(Buffer.from(payload), { authorization: `Bearer ${token}` }), res);
@@ -59,7 +59,7 @@ test('POST /api/checkout 503s when Stripe is not configured', async () => {
 
 test('POST /api/checkout validates tip and st_sedezev once configured', async () => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_dummy';
-  const { token } = await registerUser('badinput@example.com', 'badinput');
+  const { token } = await registerUser('badinput@gmail.com', 'badinput');
   const res = createMockRes();
   const payload = JSON.stringify({ tip: 'ne-obstaja', st_sedezev: 1 });
   await checkoutHandler(mockReqWithBody(Buffer.from(payload), { authorization: `Bearer ${token}` }), res);
@@ -71,7 +71,7 @@ test('POST /api/webhooks/stripe records a paket on checkout.session.completed', 
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_dummy';
   const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-  const { user } = await registerUser('stripebuyer@example.com', 'stripebuyer');
+  const { user } = await registerUser('stripebuyer@gmail.com', 'stripebuyer');
   const payload = JSON.stringify({
     id: 'evt_test',
     type: 'checkout.session.completed',

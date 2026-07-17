@@ -63,8 +63,8 @@ async function insertPendingMembership(userId, groupId) {
 }
 
 test('POST /api/auth/register creates a user and a session', async () => {
-  const { user, token } = await registerUser('owner@example.com', 'owner');
-  assert.equal(user.email, 'owner@example.com');
+  const { user, token } = await registerUser('owner@gmail.com', 'owner');
+  assert.equal(user.email, 'owner@gmail.com');
   assert.ok(token);
 
   const res = createMockRes();
@@ -74,9 +74,15 @@ test('POST /api/auth/register creates a user and a session', async () => {
 });
 
 test('POST /api/auth/register is idempotent for the same email (login, not duplicate)', async () => {
-  const first = await registerUser('same@example.com', 'first-name');
-  const second = await registerUser('same@example.com', 'ignored-name');
+  const first = await registerUser('same@gmail.com', 'first-name');
+  const second = await registerUser('same@gmail.com', 'ignored-name');
   assert.equal(first.user.id, second.user.id);
+});
+
+test('POST /api/auth/register rejects a non-Gmail address', async () => {
+  const res = createMockRes();
+  await registerHandler({ method: 'POST', body: { email: 'someone@example.com', uporabniskoIme: 'someone' } }, res);
+  assert.equal(res.statusCode, 400);
 });
 
 test('GET /api/auth/session 401s without a token', async () => {
@@ -86,14 +92,14 @@ test('GET /api/auth/session 401s without a token', async () => {
 });
 
 test('POST /api/groups requires a purchased package', async () => {
-  const { token } = await registerUser('nopackage@example.com', 'nopackage');
+  const { token } = await registerUser('nopackage@gmail.com', 'nopackage');
   const res = createMockRes();
   await groupsHandler(authedReq(token, { method: 'POST', body: { imeSkupine: 'PGD Test' } }), res);
   assert.equal(res.statusCode, 402);
 });
 
 test('POST /api/groups creates a group (as admin) and consumes the package', async () => {
-  const { user, token } = await registerUser('buyer@example.com', 'buyer');
+  const { user, token } = await registerUser('buyer@gmail.com', 'buyer');
   await grantPackage(user.id, 5);
 
   const res = createMockRes();
@@ -117,7 +123,7 @@ test('POST /api/groups creates a group (as admin) and consumes the package', asy
 });
 
 test('POST /api/groups {fakePurchase} records a paket without real payment', async () => {
-  const { token } = await registerUser('fakebuyer@example.com', 'fakebuyer');
+  const { token } = await registerUser('fakebuyer@gmail.com', 'fakebuyer');
   const res = createMockRes();
   await groupsHandler(
     authedReq(token, { method: 'POST', body: { fakePurchase: { tip: 'napredni', stSedezev: 50 } } }),
@@ -129,7 +135,7 @@ test('POST /api/groups {fakePurchase} records a paket without real payment', asy
 });
 
 test('POST /api/groups {fakePurchase} rejects an out-of-range seat count', async () => {
-  const { token } = await registerUser('fakebuyer2@example.com', 'fakebuyer2');
+  const { token } = await registerUser('fakebuyer2@gmail.com', 'fakebuyer2');
   const res = createMockRes();
   await groupsHandler(
     authedReq(token, { method: 'POST', body: { fakePurchase: { tip: 'osnovni', stSedezev: 999 } } }),
@@ -139,12 +145,12 @@ test('POST /api/groups {fakePurchase} rejects an out-of-range seat count', async
 });
 
 test('GET /api/groups lists only the caller\'s groups', async () => {
-  const { user: owner, token: ownerToken } = await registerUser('owner2@example.com', 'owner2');
+  const { user: owner, token: ownerToken } = await registerUser('owner2@gmail.com', 'owner2');
   await grantPackage(owner.id, 3);
   const createRes = createMockRes();
   await groupsHandler(authedReq(ownerToken, { method: 'POST', body: { imeSkupine: 'PGD Owner2' } }), createRes);
 
-  const { token: otherToken } = await registerUser('outsider@example.com', 'outsider');
+  const { token: otherToken } = await registerUser('outsider@gmail.com', 'outsider');
 
   const ownerList = createMockRes();
   await groupsHandler(authedReq(ownerToken, { method: 'GET' }), ownerList);
@@ -164,7 +170,7 @@ async function createGroup(email, uporabnisko_ime, seats = 5) {
 }
 
 test('PATCH /api/groups/:id lets the admin rename and set a home location', async () => {
-  const { ownerToken, group } = await createGroup('rename-owner@example.com', 'rename-owner');
+  const { ownerToken, group } = await createGroup('rename-owner@gmail.com', 'rename-owner');
   const res = createMockRes();
   await groupByIdHandler(
     authedReq(ownerToken, {
@@ -181,8 +187,8 @@ test('PATCH /api/groups/:id lets the admin rename and set a home location', asyn
 });
 
 test('PATCH /api/groups/:id is forbidden for a non-admin', async () => {
-  const { group } = await createGroup('owner3@example.com', 'owner3');
-  const { token: strangerToken } = await registerUser('stranger@example.com', 'stranger');
+  const { group } = await createGroup('owner3@gmail.com', 'owner3');
+  const { token: strangerToken } = await registerUser('stranger@gmail.com', 'stranger');
 
   const res = createMockRes();
   await groupByIdHandler(authedReq(strangerToken, { method: 'PATCH', query: { id: group.id }, body: { ime: 'Hack' } }), res);
@@ -190,7 +196,7 @@ test('PATCH /api/groups/:id is forbidden for a non-admin', async () => {
 });
 
 test('POST /api/groups {join} auto-approves and auto-creates a group for an unknown name', async () => {
-  const { token, user } = await registerUser('joinauto@example.com', 'joinauto');
+  const { token, user } = await registerUser('joinauto@gmail.com', 'joinauto');
   const res = createMockRes();
   await groupsHandler(
     authedReq(token, { method: 'POST', body: { join: { imeSkupine: `Ni Obstajala ${crypto.randomUUID()}` } } }),
@@ -203,8 +209,8 @@ test('POST /api/groups {join} auto-approves and auto-creates a group for an unkn
 });
 
 test('POST /api/groups {join} joins an existing group as a member', async () => {
-  const { group } = await createGroup('joinexisting-owner@example.com', 'joinexisting-owner', 3);
-  const { token: guestToken, user: guest } = await registerUser('joinexisting-guest@example.com', 'joinexisting-guest');
+  const { group } = await createGroup('joinexisting-owner@gmail.com', 'joinexisting-owner', 3);
+  const { token: guestToken, user: guest } = await registerUser('joinexisting-guest@gmail.com', 'joinexisting-guest');
 
   const res = createMockRes();
   await groupsHandler(authedReq(guestToken, { method: 'POST', body: { join: { imeSkupine: group.ime } } }), res);
@@ -216,9 +222,9 @@ test('POST /api/groups {join} joins an existing group as a member', async () => 
 });
 
 test('POST /api/groups {join} blocks joining a second group', async () => {
-  const { group: firstGroup } = await createGroup('multigroup-a@example.com', 'multigroup-a');
-  const { group: secondGroup } = await createGroup('multigroup-b@example.com', 'multigroup-b');
-  const { token: guestToken } = await registerUser('multigroup-guest@example.com', 'multigroup-guest');
+  const { group: firstGroup } = await createGroup('multigroup-a@gmail.com', 'multigroup-a');
+  const { group: secondGroup } = await createGroup('multigroup-b@gmail.com', 'multigroup-b');
+  const { token: guestToken } = await registerUser('multigroup-guest@gmail.com', 'multigroup-guest');
 
   const firstJoin = createMockRes();
   await groupsHandler(authedReq(guestToken, { method: 'POST', body: { join: { imeSkupine: firstGroup.ime } } }), firstJoin);
@@ -230,8 +236,8 @@ test('POST /api/groups {join} blocks joining a second group', async () => {
 });
 
 test('GET /api/groups?imeSkupine=... lets the caller poll their own request status', async () => {
-  const { group } = await createGroup('joinpoll@example.com', 'joinpoll', 2);
-  const { token: guestToken } = await registerUser('guestpoll@example.com', 'guestpoll');
+  const { group } = await createGroup('joinpoll@gmail.com', 'joinpoll', 2);
+  const { token: guestToken } = await registerUser('guestpoll@gmail.com', 'guestpoll');
 
   const notFoundRes = createMockRes();
   await groupsHandler(authedReq(guestToken, { method: 'GET', query: { imeSkupine: group.ime } }), notFoundRes);
@@ -246,8 +252,8 @@ test('GET /api/groups?imeSkupine=... lets the caller poll their own request stat
 });
 
 test('Approving a pending membership fails once the group is full, succeeds when a seat is free', async () => {
-  const { ownerToken, group } = await createGroup('seatlimit-owner@example.com', 'seatlimit-owner', 1);
-  const { user: guest } = await registerUser('seatlimit-guest@example.com', 'seatlimit-guest');
+  const { ownerToken, group } = await createGroup('seatlimit-owner@gmail.com', 'seatlimit-owner', 1);
+  const { user: guest } = await registerUser('seatlimit-guest@gmail.com', 'seatlimit-guest');
   const membershipId = await insertPendingMembership(guest.id, group.id);
 
   // The group only has 1 seat and the admin already occupies it.
@@ -260,8 +266,8 @@ test('Approving a pending membership fails once the group is full, succeeds when
 });
 
 test('Admin can approve a pending membership when a seat is available', async () => {
-  const { ownerToken, group } = await createGroup('seatok-owner@example.com', 'seatok-owner', 2);
-  const { user: guest } = await registerUser('seatok-guest@example.com', 'seatok-guest');
+  const { ownerToken, group } = await createGroup('seatok-owner@gmail.com', 'seatok-owner', 2);
+  const { user: guest } = await registerUser('seatok-guest@gmail.com', 'seatok-guest');
   const membershipId = await insertPendingMembership(guest.id, group.id);
 
   const approveRes = createMockRes();
@@ -274,8 +280,8 @@ test('Admin can approve a pending membership when a seat is available', async ()
 });
 
 test('Admin can reject a pending membership via PATCH', async () => {
-  const { ownerToken, group } = await createGroup('reject-owner@example.com', 'reject-owner', 2);
-  const { user: guest } = await registerUser('reject-guest@example.com', 'reject-guest');
+  const { ownerToken, group } = await createGroup('reject-owner@gmail.com', 'reject-owner', 2);
+  const { user: guest } = await registerUser('reject-guest@gmail.com', 'reject-guest');
   const membershipId = await insertPendingMembership(guest.id, group.id);
 
   const rejectRes = createMockRes();
@@ -288,8 +294,8 @@ test('Admin can reject a pending membership via PATCH', async () => {
 });
 
 test('Admin can remove a membership via DELETE', async () => {
-  const { ownerToken, group } = await createGroup('remove-owner@example.com', 'remove-owner', 2);
-  const { user: guest } = await registerUser('remove-guest@example.com', 'remove-guest');
+  const { ownerToken, group } = await createGroup('remove-owner@gmail.com', 'remove-owner', 2);
+  const { user: guest } = await registerUser('remove-guest@gmail.com', 'remove-guest');
   const membershipId = await insertPendingMembership(guest.id, group.id);
 
   const deleteRes = createMockRes();
@@ -301,15 +307,15 @@ test('Admin can remove a membership via DELETE', async () => {
 });
 
 test('A member cannot approve or remove other members', async () => {
-  const { ownerToken, group } = await createGroup('joinowner4@example.com', 'joinowner4', 3);
-  const { token: memberToken, user: member } = await registerUser('member4@example.com', 'member4');
+  const { ownerToken, group } = await createGroup('joinowner4@gmail.com', 'joinowner4', 3);
+  const { token: memberToken, user: member } = await registerUser('member4@gmail.com', 'member4');
   const memberMembershipId = await insertPendingMembership(member.id, group.id);
   await groupMembersHandler(
     authedReq(ownerToken, { method: 'PATCH', query: { id: group.id, membershipId: memberMembershipId }, body: { status: 'approved' } }),
     createMockRes()
   );
 
-  const { user: otherGuest } = await registerUser('guest4@example.com', 'guest4');
+  const { user: otherGuest } = await registerUser('guest4@gmail.com', 'guest4');
   const otherMembershipId = await insertPendingMembership(otherGuest.id, group.id);
 
   const forbiddenRes = createMockRes();
@@ -321,9 +327,9 @@ test('A member cannot approve or remove other members', async () => {
 });
 
 test('GET /api/groups/:id/members lists only approved members, visible to any member', async () => {
-  const { ownerToken, group } = await createGroup('memberslist@example.com', 'memberslist', 3);
-  const { token: memberToken } = await registerUser('memberslist-m@example.com', 'memberslist-m');
-  const { token: strangerToken } = await registerUser('memberslist-x@example.com', 'memberslist-x');
+  const { ownerToken, group } = await createGroup('memberslist@gmail.com', 'memberslist', 3);
+  const { token: memberToken } = await registerUser('memberslist-m@gmail.com', 'memberslist-m');
+  const { token: strangerToken } = await registerUser('memberslist-x@gmail.com', 'memberslist-x');
 
   await groupsHandler(authedReq(memberToken, { method: 'POST', body: { join: { imeSkupine: group.ime } } }), createMockRes());
 
@@ -345,8 +351,8 @@ test('GET /api/groups/:id/members lists only approved members, visible to any me
 });
 
 test('Admin can promote a member to admin', async () => {
-  const { ownerToken, group } = await createGroup('promote@example.com', 'promote', 3);
-  const { token: memberToken, user: member } = await registerUser('promoted-member@example.com', 'promoted-member');
+  const { ownerToken, group } = await createGroup('promote@gmail.com', 'promote', 3);
+  const { token: memberToken, user: member } = await registerUser('promoted-member@gmail.com', 'promoted-member');
 
   const joinRes = createMockRes();
   await groupsHandler(authedReq(memberToken, { method: 'POST', body: { join: { imeSkupine: group.ime } } }), joinRes);
@@ -366,8 +372,8 @@ test('Admin can promote a member to admin', async () => {
 });
 
 test('Admin can add, list, update, and remove vehicles; members can only list', async () => {
-  const { ownerToken, group } = await createGroup('vehowner@example.com', 'vehowner');
-  const { token: memberToken } = await registerUser('vehmember@example.com', 'vehmember');
+  const { ownerToken, group } = await createGroup('vehowner@gmail.com', 'vehowner');
+  const { token: memberToken } = await registerUser('vehmember@gmail.com', 'vehmember');
   await groupsHandler(authedReq(memberToken, { method: 'POST', body: { join: { imeSkupine: group.ime } } }), createMockRes());
 
   const addRes = createMockRes();
