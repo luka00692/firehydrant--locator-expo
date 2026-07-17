@@ -4,6 +4,8 @@
   "main": "index.js",
   "dependencies": {
     "@teovilla/react-native-web-maps": "^0.9.5",
+    "bcryptjs": "^3.0.3",
+    "crypto-js": "^4.2.0",
     "expo": "~57.0.4",
     "expo-location": "~57.0.2",
     "expo-status-bar": "~57.0.0",
