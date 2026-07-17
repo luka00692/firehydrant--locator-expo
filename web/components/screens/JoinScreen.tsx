@@ -27,15 +27,7 @@ export default function JoinScreen() {
       setPendingGroupName(ime);
       setScreen('waiting');
     } catch (err) {
-      if (err instanceof ApiRequestError && err.status === 404) {
-        setError('Skupine s tem imenom ni bilo mogoče najti.');
-      } else if (err instanceof ApiRequestError && err.status === 400 && err.message.includes('already a member')) {
-        setError('Že si del ene skupine — nove prošnje ni mogoče poslati.');
-      } else if (err instanceof ApiRequestError && err.status === 400) {
-        setError('Prošnjo za to skupino si že poslal.');
-      } else {
-        setError(err instanceof ApiRequestError ? err.message : 'Prošnja ni uspela.');
-      }
+      setError(err instanceof ApiRequestError ? err.message : 'Prošnja ni uspela.');
     } finally {
       setLoading(false);
     }

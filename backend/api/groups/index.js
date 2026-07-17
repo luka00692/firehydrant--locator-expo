@@ -54,17 +54,6 @@ module.exports = async function handler(req, res) {
       const { imeSkupine: joinIme } = join;
       if (!joinIme) return res.status(400).json({ error: 'imeSkupine is required' });
 
-      // The app only shows a user their first group (see web/lib/app-state.tsx),
-      // so a user belonging to more than one would silently lose access to the
-      // rest — block joining/requesting a second group while already in one.
-      const { rows: existing } = await pool.query(
-        `SELECT 1 FROM clanstvo WHERE uporabnik_id = $1 AND status IN ('pending', 'approved') LIMIT 1`,
-        [user.id]
-      );
-      if (existing[0]) {
-        return res.status(400).json({ error: 'already a member of (or already requested) a group' });
-      }
-
       const { rows: groups } = await pool.query(`SELECT * FROM skupina WHERE ime = $1`, [joinIme]);
       let group = groups[0];
 
@@ -73,8 +62,10 @@ module.exports = async function handler(req, res) {
         // 'pending' for admin review) since the endpoint that would otherwise
         // approve/reject it is a lower priority than getting testers into the
         // app. Also auto-creates the group (as the requester's admin) when the
-        // typed name doesn't match an existing one, instead of 404ing.
-        // Revert both once real group/membership management workflows matter
+        // typed name doesn't match an existing one, instead of 404ing. A user
+        // can belong to any number of groups and re-request the same one —
+        // neither is blocked, always lets them through.
+        // Revert once real group/membership management workflows matter
         // more than frictionless demo access — see backend/README.md TODO.
         let vloga = 'member';
         if (!group) {
@@ -88,7 +79,9 @@ module.exports = async function handler(req, res) {
 
         const { rows } = await pool.query(
           `INSERT INTO clanstvo (uporabnik_id, skupina_id, vloga, status)
-           VALUES ($1, $2, $3, 'approved') RETURNING ${MEMBERSHIP_FIELDS}`,
+           VALUES ($1, $2, $3, 'approved')
+           ON CONFLICT (uporabnik_id, skupina_id) DO UPDATE SET status = 'approved'
+           RETURNING ${MEMBERSHIP_FIELDS}`,
           [user.id, group.id, vloga]
         );
 
@@ -121,18 +114,6 @@ module.exports = async function handler(req, res) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-
-      // The app only shows a user their first group (see web/lib/app-state.tsx),
-      // so a user belonging to more than one would silently lose access to the
-      // rest — block creating a second group while already in one.
-      const { rows: existingMembership } = await client.query(
-        `SELECT 1 FROM clanstvo WHERE uporabnik_id = $1 AND status IN ('pending', 'approved') LIMIT 1`,
-        [user.id]
-      );
-      if (existingMembership[0]) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'already a member of (or already requested) a group' });
-      }
 
       // Consume the buyer's oldest unassigned package — this is what "you need
       // a purchased package before you can create a group" means in practice.

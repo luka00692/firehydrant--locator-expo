@@ -97,7 +97,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setUser(sessionUser);
         const existingGroup = await refreshGroup();
         if (cancelled) return;
-        bootRef.current!.resolve(existingGroup ? 'app' : 'packages');
+        // A returning user who already belongs to a group skips straight to
+        // the app, but one who hasn't bought a package/group yet must still
+        // go through login/registration before ever seeing the packages
+        // screen, even with a still-valid stored session — completeAuth()
+        // sends them on to 'packages' itself once they submit the form.
+        bootRef.current!.resolve(existingGroup ? 'app' : 'auth');
       } catch (err) {
         if (err instanceof ApiRequestError && err.status === 401) {
           clearToken();

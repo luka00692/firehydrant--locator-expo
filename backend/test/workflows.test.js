@@ -115,11 +115,17 @@ test('POST /api/groups creates a group (as admin) and consumes the package', asy
   assert.equal(membershipRows[0].vloga, 'admin');
   assert.equal(membershipRows[0].status, 'approved');
 
-  // A second group creation now fails — the user already belongs to one
-  // (also true for the one package, which was already consumed).
+  // A second group creation fails only because the one package was already
+  // consumed — belonging to a group already is not itself blocked (a user
+  // can belong to any number of groups).
   const secondRes = createMockRes();
   await groupsHandler(authedReq(token, { method: 'POST', body: { imeSkupine: 'PGD Drugo' } }), secondRes);
-  assert.equal(secondRes.statusCode, 400);
+  assert.equal(secondRes.statusCode, 402);
+
+  await grantPackage(user.id, 3);
+  const thirdRes = createMockRes();
+  await groupsHandler(authedReq(token, { method: 'POST', body: { imeSkupine: 'PGD Tretja' } }), thirdRes);
+  assert.equal(thirdRes.statusCode, 201);
 });
 
 test('POST /api/groups {fakePurchase} records a paket without real payment', async () => {
@@ -221,7 +227,7 @@ test('POST /api/groups {join} joins an existing group as a member', async () => 
   assert.equal(res.body.uporabnikId, guest.id);
 });
 
-test('POST /api/groups {join} blocks joining a second group', async () => {
+test('POST /api/groups {join} allows joining more than one group', async () => {
   const { group: firstGroup } = await createGroup('multigroup-a@gmail.com', 'multigroup-a');
   const { group: secondGroup } = await createGroup('multigroup-b@gmail.com', 'multigroup-b');
   const { token: guestToken } = await registerUser('multigroup-guest@gmail.com', 'multigroup-guest');
@@ -232,7 +238,23 @@ test('POST /api/groups {join} blocks joining a second group', async () => {
 
   const secondJoin = createMockRes();
   await groupsHandler(authedReq(guestToken, { method: 'POST', body: { join: { imeSkupine: secondGroup.ime } } }), secondJoin);
-  assert.equal(secondJoin.statusCode, 400);
+  assert.equal(secondJoin.statusCode, 201);
+  assert.equal(secondJoin.body.status, 'approved');
+});
+
+test('POST /api/groups {join} re-requesting the same group is idempotent, not an error', async () => {
+  const { group } = await createGroup('rejoin-owner@gmail.com', 'rejoin-owner', 3);
+  const { token: guestToken } = await registerUser('rejoin-guest@gmail.com', 'rejoin-guest');
+
+  const firstJoin = createMockRes();
+  await groupsHandler(authedReq(guestToken, { method: 'POST', body: { join: { imeSkupine: group.ime } } }), firstJoin);
+  assert.equal(firstJoin.statusCode, 201);
+
+  const secondJoin = createMockRes();
+  await groupsHandler(authedReq(guestToken, { method: 'POST', body: { join: { imeSkupine: group.ime } } }), secondJoin);
+  assert.equal(secondJoin.statusCode, 201);
+  assert.equal(secondJoin.body.status, 'approved');
+  assert.equal(secondJoin.body.id, firstJoin.body.id);
 });
 
 test('GET /api/groups?imeSkupine=... lets the caller poll their own request status', async () => {
