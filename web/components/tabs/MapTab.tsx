@@ -283,7 +283,7 @@ export default function MapTab() {
             <div className="w-[38px] h-1 rounded-full bg-[#D9DEE3] mx-auto mb-4" />
             <div className="flex items-start gap-3 mb-4">
               <div className="w-11 h-11 rounded-xl bg-[#FCE7E7] flex items-center justify-center flex-shrink-0">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={selType === 'nadzemni' ? '#C62828' : '#E57373'} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={selType === 'nadzemni' ? '#C62828' : '#F57C00'} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5S12.5 5 12 3c-.5 2-2 4-4 6.5S5 13 5 15a7 7 0 0 0 7 7z" />
                 </svg>
               </div>
