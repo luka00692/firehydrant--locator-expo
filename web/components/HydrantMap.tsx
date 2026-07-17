@@ -21,11 +21,13 @@ const TYPE_COLOR: Record<'nadzemni' | 'podzemni', string> = {
 };
 const SELECTED_COLOR = '#4A1212';
 
-// Dot size grows as you zoom in, so hydrants are small/uncluttered across a
-// wide area but big and easy to pick out (and tap) when you zoom into a
-// precise spot. Below zoom 12 they stay compact.
+// Radius is in SCREEN PIXELS (L.circleMarker is screen-space, not meters), so
+// dots never scale with the underlying map geometry. The size only ever holds
+// or grows as you zoom in — a readable 7px floor when zoomed out, rising to
+// 24px when zoomed right in, so hydrants are always visible and easy to pick
+// out (and tap) in a precise spot, and never appear smaller as you zoom in.
 function radiusForZoom(zoom: number, selected: boolean): number {
-  const base = zoom <= 12 ? 5 : Math.min(5 + (zoom - 12) * 2.8, 24);
+  const base = Math.max(7, Math.min(7 + (zoom - 11) * 2.4, 24));
   return selected ? base + 4 : base;
 }
 
