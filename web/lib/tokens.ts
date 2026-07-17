@@ -2,7 +2,7 @@
 export const colors = {
   primary: '#C62828',
   maroon: '#4A1212',
-  underground: '#E57373',
+  underground: '#F57C00',
   fire: '#E4572E',
   lightTint: '#FCE7E7',
   spinnerTrack: '#F0C4C4',

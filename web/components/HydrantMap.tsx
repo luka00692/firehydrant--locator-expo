@@ -17,7 +17,7 @@ function hydrantType(h: Hydrant): 'nadzemni' | 'podzemni' {
 
 const TYPE_COLOR: Record<'nadzemni' | 'podzemni', string> = {
   nadzemni: '#C62828',
-  podzemni: '#E57373'
+  podzemni: '#F57C00'
 };
 const SELECTED_COLOR = '#4A1212';
 
