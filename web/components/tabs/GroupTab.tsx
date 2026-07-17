@@ -27,16 +27,22 @@ export default function GroupTab({ onRequestsChange }: { onRequestsChange: (coun
 
   const load = useCallback(async () => {
     if (!group) return;
+    // Fetched independently: pending-requests currently 404s/CORS-fails in
+    // production (excluded from the deploy, see backend/README.md TODO), and
+    // that shouldn't also blank out the members list.
     try {
-      const [m, r] = await Promise.all([
-        api.members(group.id),
-        isAdmin ? api.pendingRequests(group.id) : Promise.resolve([])
-      ]);
-      setMembers(m);
-      setRequests(r);
-      onRequestsChange(r.length);
+      setMembers(await api.members(group.id));
     } catch {
       // transient — keep showing the last known state
+    }
+    if (isAdmin) {
+      try {
+        const r = await api.pendingRequests(group.id);
+        setRequests(r);
+        onRequestsChange(r.length);
+      } catch {
+        // transient — keep showing the last known state
+      }
     }
   }, [group, isAdmin, onRequestsChange]);
 
