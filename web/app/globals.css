@@ -54,7 +54,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: #c62828;
+  background: #2563eb;
   animation: ab-pulse 2s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
 }
 

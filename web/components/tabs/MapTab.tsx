@@ -43,6 +43,12 @@ function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: n
 // Ignore accuracy re-searches closer together than this (metres).
 const LIVE_RESEARCH_MIN_MOVE = 40;
 
+function waterSourceLabel(source: string | undefined) {
+  if (source === 'main' || source === 'piped') return 'Javno omrežje';
+  if (source === 'groundwater') return 'Vrtina';
+  if (!source) return 'ni podatka';
+  return source;
+}
 export default function MapTab() {
   const { vehicles, activeVehicleId } = useAppState();
   const activeVehicle = vehicles.find((v) => v.id === activeVehicleId);
@@ -411,7 +417,11 @@ export default function MapTab() {
               <div className="bg-[#F6F8FA] rounded-[10px] p-2.5">
                 <div className="text-[11px] text-[#8A949E] uppercase tracking-wide">Premer</div>
                 <div className="text-base font-bold text-[#4A1212]">
-                  {sel.properties['fire_hydrant:diameter'] ? `${sel.properties['fire_hydrant:diameter']} mm` : 'ni podatka'}
+                  {sel.properties['fire_hydrant:diameter']
+                    ? `${sel.properties['fire_hydrant:diameter']} mm`
+                    : sel.properties['couplings:diameters']
+                      ? sel.properties['couplings:diameters'].split(/;\s*/).join(', ')
+                      : 'ni podatka'}
                 </div>
               </div>
               <div className="bg-[#F6F8FA] rounded-[10px] p-2.5">
@@ -423,8 +433,16 @@ export default function MapTab() {
               <div className="bg-[#F6F8FA] rounded-[10px] p-2.5">
                 <div className="text-[11px] text-[#8A949E] uppercase tracking-wide">Tlak</div>
                 <div className="text-base font-bold text-[#4A1212]">
-                  {sel.properties['pressure'] ? `${sel.properties['pressure']} bar` : 'ni podatka'}
+                  {sel.properties['fire_hydrant:pressure'] ? `${sel.properties['fire_hydrant:pressure']} bar` : 'ni podatka'}
                 </div>
+              </div>
+              <div className="bg-[#F6F8FA] rounded-[10px] p-2.5">
+                <div className="text-[11px] text-[#8A949E] uppercase tracking-wide">Vir vode</div>
+                <div className="text-base font-bold text-[#4A1212]">{waterSourceLabel(sel.properties['water_source'])}</div>
+              </div>
+              <div className="bg-[#F6F8FA] rounded-[10px] p-2.5">
+                <div className="text-[11px] text-[#8A949E] uppercase tracking-wide">Priključki</div>
+                <div className="text-base font-bold text-[#4A1212]">{sel.properties['couplings'] ?? 'ni podatka'}</div>
               </div>
             </div>
 

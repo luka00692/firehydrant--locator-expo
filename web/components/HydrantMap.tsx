@@ -56,7 +56,7 @@ function meIcon() {
     className: 'me-dot',
     iconSize: [22, 22],
     iconAnchor: [11, 11],
-    html: `<div class="ring"></div><div style="position:absolute;inset:0;border-radius:50%;background:#C62828;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,48,64,.4);"></div>`
+    html: `<div class="ring"></div><div style="position:absolute;inset:0;border-radius:50%;background:#2563EB;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,48,64,.4);"></div>`
   });
 }
 
@@ -267,9 +267,9 @@ export default function HydrantMap({
         } else {
           accuracyCircleRef.current = L.circle(pos, {
             radius: firePoint.accuracy,
-            color: '#C62828',
+            color: '#2563EB',
             weight: 1,
-            fillColor: '#C62828',
+            fillColor: '#2563EB',
             fillOpacity: 0.08
           }).addTo(layer);
         }
@@ -294,9 +294,9 @@ export default function HydrantMap({
     if (firePoint.kind === 'me' && firePoint.accuracy) {
       accuracyCircleRef.current = L.circle(pos, {
         radius: firePoint.accuracy,
-        color: '#C62828',
+        color: '#2563EB',
         weight: 1,
-        fillColor: '#C62828',
+        fillColor: '#2563EB',
         fillOpacity: 0.08
       }).addTo(layer);
     }
