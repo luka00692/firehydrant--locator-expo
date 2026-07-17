@@ -44,9 +44,9 @@ export default function MapTab() {
   );
   const [nearest, setNearest] = useState<NearestHydrantResult | null>(null);
 
-  // Load every hydrant once. They're rendered via marker clustering, so the
-  // whole country's worth stays on the map at all zoom levels without lag —
-  // no need to refetch as the viewport moves.
+  // Load every hydrant once. They're drawn as individual canvas circle markers,
+  // so the whole country's worth stays on the map at all zoom levels without lag
+  // — no need to refetch as the viewport moves.
   useEffect(() => {
     let cancelled = false;
     (async () => {
