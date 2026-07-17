@@ -1,9 +1,11 @@
 // Flat price per tier (matches web/components/screens/PackagesScreen.tsx),
-// each for a fixed headcount rather than a per-seat price or a range.
+// each covering a fixed seat-count range rather than a per-seat price. The
+// frontend defaults the quantity to maxSeats and lets people reduce it down
+// to minSeats, rather than the other way round.
 const TIERS = {
-  osnovni: { priceCents: 499, minSeats: 50, maxSeats: 50 },
-  napredni: { priceCents: 1499, minSeats: 100, maxSeats: 100 },
-  premium: { priceCents: 2499, minSeats: 200, maxSeats: 200 }
+  osnovni: { priceCents: 499, minSeats: 1, maxSeats: 50 },
+  napredni: { priceCents: 1499, minSeats: 50, maxSeats: 100 },
+  premium: { priceCents: 2499, minSeats: 100, maxSeats: 200 }
 };
 
 function validateTier(tip, stSedezev) {
