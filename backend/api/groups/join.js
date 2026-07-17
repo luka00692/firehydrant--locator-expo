@@ -56,21 +56,35 @@ module.exports = async function handler(req, res) {
   }
 
   const { rows: groups } = await pool.query(`SELECT * FROM skupina WHERE ime = $1`, [imeSkupine]);
-  const group = groups[0];
-  if (!group) return res.status(404).json({ error: 'group not found' });
+  let group = groups[0];
 
   try {
+    // TEMPORARY (same reasoning as the auto-approve above): typing any name
+    // that doesn't match an existing group used to 404. Auto-create it
+    // instead so entering any group name always lets the user through, and
+    // make the creator its admin since there's no existing owner to approve
+    // them.
+    let vloga = 'member';
+    if (!group) {
+      const { rows: createdGroups } = await pool.query(
+        `INSERT INTO skupina (lastnik_id, ime, st_sedezev) VALUES ($1, $2, 0) RETURNING *`,
+        [user.id, imeSkupine]
+      );
+      group = createdGroups[0];
+      vloga = 'admin';
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO clanstvo (uporabnik_id, skupina_id, vloga, status)
-       VALUES ($1, $2, 'member', 'approved') RETURNING ${MEMBERSHIP_FIELDS}`,
-      [user.id, group.id]
+       VALUES ($1, $2, $3, 'approved') RETURNING ${MEMBERSHIP_FIELDS}`,
+      [user.id, group.id, vloga]
     );
 
     const { rows: owners } = await pool.query(
       `SELECT u.push_token FROM uporabnik u
        JOIN clanstvo c ON c.uporabnik_id = u.id
-       WHERE c.skupina_id = $1 AND c.vloga = 'admin' AND c.status = 'approved'`,
-      [group.id]
+       WHERE c.skupina_id = $1 AND c.vloga = 'admin' AND c.status = 'approved' AND u.id != $2`,
+      [group.id, user.id]
     );
     await Promise.all(
       owners.map((owner) =>
