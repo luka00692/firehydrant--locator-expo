@@ -21,12 +21,20 @@ const TYPE_COLOR: Record<'nadzemni' | 'podzemni', string> = {
 };
 const SELECTED_COLOR = '#4A1212';
 
+// Dot size grows as you zoom in, so hydrants are small/uncluttered across a
+// wide area but big and easy to pick out (and tap) when you zoom into a
+// precise spot. Below zoom 12 they stay compact.
+function radiusForZoom(zoom: number, selected: boolean): number {
+  const base = zoom <= 12 ? 5 : Math.min(5 + (zoom - 12) * 1.6, 14);
+  return selected ? base + 3 : base;
+}
+
 // Every hydrant is a canvas circle marker (not a DOM/SVG pin). All of them draw
 // on one shared canvas in a single paint pass, so tens of thousands of
 // individual marks stay smooth to pan and zoom.
-function circleStyle(h: Hydrant, selected: boolean): L.CircleMarkerOptions {
+function circleStyle(h: Hydrant, selected: boolean, radius: number): L.CircleMarkerOptions {
   return {
-    radius: selected ? 8 : 5,
+    radius,
     color: '#fff',
     weight: selected ? 2 : 1.2,
     fillColor: selected ? SELECTED_COLOR : TYPE_COLOR[hydrantType(h)],
@@ -143,6 +151,12 @@ export default function HydrantMap({
       onMapClickRef.current({ lat: e.latlng.lat, lng: e.latlng.lng });
     });
 
+    // Resize every dot to match the new zoom so they grow as you zoom in.
+    map.on('zoomend', () => {
+      const z = map.getZoom();
+      markers.forEach((m, id) => m.setRadius(radiusForZoom(z, id === selectedIdRef.current)));
+    });
+
     const timer = setTimeout(() => {
       // React StrictMode's dev-only mount→unmount→remount can fire this after
       // cleanup already tore the map down — guard against acting on a dead map.
@@ -181,12 +195,14 @@ export default function HydrantMap({
       }
     }
 
+    const zoom = mapRef.current?.getZoom() ?? 8;
     for (const h of hydrants) {
       byId.set(h.id, h);
       if (markers.has(h.id)) continue;
+      const selected = h.id === selectedIdRef.current;
       const marker = L.circleMarker([h.lat, h.lon], {
         renderer,
-        ...circleStyle(h, h.id === selectedIdRef.current)
+        ...circleStyle(h, selected, radiusForZoom(zoom, selected))
       }) as HydrantCircle;
       marker.__hid = h.id;
       group.addLayer(marker);
@@ -200,17 +216,18 @@ export default function HydrantMap({
     const byId = hydrantByIdRef.current;
     const prev = selectedIdRef.current;
     selectedIdRef.current = selectedHydrantId;
+    const zoom = mapRef.current?.getZoom() ?? 8;
 
     if (prev != null && prev !== selectedHydrantId) {
       const m = markers.get(prev);
       const h = byId.get(prev);
-      if (m && h) m.setStyle(circleStyle(h, false));
+      if (m && h) m.setStyle(circleStyle(h, false, radiusForZoom(zoom, false)));
     }
     if (selectedHydrantId != null) {
       const m = markers.get(selectedHydrantId);
       const h = byId.get(selectedHydrantId);
       if (m && h) {
-        m.setStyle(circleStyle(h, true));
+        m.setStyle(circleStyle(h, true, radiusForZoom(zoom, true)));
         m.bringToFront();
       }
     }
