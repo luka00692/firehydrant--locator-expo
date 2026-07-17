@@ -5,10 +5,10 @@ import { useAppState } from '@/lib/app-state';
 import { api, ApiRequestError } from '@/lib/api';
 import type { PaketTip } from '@/lib/types';
 
-const PACKAGE_DEFS: { tip: PaketTip; name: string; seatsLabel: string; price: string; maxQty: number }[] = [
-  { tip: 'osnovni', name: 'Mali', seatsLabel: '1 oseba', price: '4,99 €', maxQty: 1 },
-  { tip: 'napredni', name: 'Srednji', seatsLabel: 'do 50 oseb', price: '14,99 €', maxQty: 50 },
-  { tip: 'premium', name: 'Veliki', seatsLabel: 'do 100 oseb', price: '29,99 €', maxQty: 100 }
+const PACKAGE_DEFS: { tip: PaketTip; name: string; seatsLabel: string; price: string; minQty: number; maxQty: number }[] = [
+  { tip: 'osnovni', name: 'Mali', seatsLabel: '1–50 oseb', price: '4,99 €', minQty: 1, maxQty: 50 },
+  { tip: 'napredni', name: 'Srednji', seatsLabel: '50–100 oseb', price: '14,99 €', minQty: 50, maxQty: 100 },
+  { tip: 'premium', name: 'Veliki', seatsLabel: '100–200 oseb', price: '24,99 €', minQty: 100, maxQty: 200 }
 ];
 
 export default function PackagesScreen() {
@@ -20,8 +20,7 @@ export default function PackagesScreen() {
     setError(null);
     setLoading(true);
     try {
-      const seats = PACKAGE_DEFS.find((p) => p.tip === selectedPackage.tip)!.maxQty === 1 ? 1 : selectedPackage.qty;
-      const res = await api.checkout(selectedPackage.tip, seats);
+      const res = await api.checkout(selectedPackage.tip, selectedPackage.qty);
       window.location.href = res.url;
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 503) {
@@ -44,7 +43,7 @@ export default function PackagesScreen() {
         return (
           <div
             key={p.tip}
-            onClick={() => setSelectedPackage({ tip: p.tip, qty: selectedPackage.tip === p.tip ? selectedPackage.qty : 1 })}
+            onClick={() => setSelectedPackage({ tip: p.tip, qty: selectedPackage.tip === p.tip ? selectedPackage.qty : p.minQty })}
             className="bg-white rounded-2xl p-4.5 mb-3.5 cursor-pointer border-2 transition-colors"
             style={{ borderColor: selected ? '#C62828' : '#ECEFF2' }}
           >
@@ -55,14 +54,14 @@ export default function PackagesScreen() {
               </div>
               <div className="text-xl font-bold text-[#C62828]">{p.price}</div>
             </div>
-            {selected && p.maxQty > 1 && (
+            {selected && p.maxQty > p.minQty && (
               <div className="flex items-center gap-3.5 mt-4 pt-3.5 border-t border-[#ECEFF2]">
-                <span className="text-[13px] font-semibold text-[#2F3940]">Količina</span>
+                <span className="text-[13px] font-semibold text-[#2F3940]">Število oseb</span>
                 <div className="flex items-center gap-3 ml-auto">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedPackage({ tip: p.tip, qty: Math.max(1, selectedPackage.qty - 1) });
+                      setSelectedPackage({ tip: p.tip, qty: Math.max(p.minQty, selectedPackage.qty - 1) });
                     }}
                     className="w-[34px] h-[34px] rounded-full border border-[#D9DEE3] bg-white text-xl leading-none cursor-pointer text-[#4A1212]"
                   >

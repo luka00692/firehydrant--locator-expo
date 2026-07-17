@@ -1,8 +1,13 @@
 const { applyCors } = require('../../lib/cors');
 const { requireAuth } = require('../../lib/auth');
 
-const VALID_TYPES = ['osnovni', 'napredni', 'premium'];
-const CENTS_PER_SEAT = 500; // placeholder pricing — adjust once real prices are decided
+// Flat price per tier (matches web/components/screens/PackagesScreen.tsx),
+// each covering a fixed seat-count range rather than a per-seat price.
+const TIERS = {
+  osnovni: { priceCents: 499, minSeats: 1, maxSeats: 50 },
+  napredni: { priceCents: 1499, minSeats: 50, maxSeats: 100 },
+  premium: { priceCents: 2499, minSeats: 100, maxSeats: 200 }
+};
 
 // Requires STRIPE_SECRET_KEY. The purchase itself is only recorded once the
 // webhook confirms payment (api/webhooks/stripe.js), not here — see schema.sql's
@@ -20,8 +25,15 @@ module.exports = async function handler(req, res) {
   if (!user) return;
 
   const { tip, st_sedezev } = req.body || {};
-  if (!VALID_TYPES.includes(tip) || !Number.isInteger(st_sedezev) || st_sedezev < 1) {
-    return res.status(400).json({ error: 'tip (osnovni|napredni|premium) and a positive integer st_sedezev are required' });
+  const tier = TIERS[tip];
+  if (!tier || !Number.isInteger(st_sedezev) || st_sedezev < tier.minSeats || st_sedezev > tier.maxSeats) {
+    return res.status(400).json({
+      error: `tip must be one of ${Object.keys(TIERS).join('|')}, with st_sedezev in that tier's range (${Object.entries(
+        TIERS
+      )
+        .map(([t, { minSeats, maxSeats }]) => `${t}: ${minSeats}-${maxSeats}`)
+        .join(', ')})`
+    });
   }
 
   const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -32,7 +44,7 @@ module.exports = async function handler(req, res) {
         price_data: {
           currency: 'eur',
           product_data: { name: `Paket ${tip} (${st_sedezev} mest)` },
-          unit_amount: CENTS_PER_SEAT * st_sedezev
+          unit_amount: tier.priceCents
         },
         quantity: 1
       }

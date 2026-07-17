@@ -53,7 +53,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [activeVehicleId, setActiveVehicleId] = useState<string | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<{ tip: PaketTip; qty: number }>({
     tip: 'napredni',
-    qty: 1
+    qty: 50
   });
   const [pendingGroupName, setPendingGroupName] = useState('');
 
