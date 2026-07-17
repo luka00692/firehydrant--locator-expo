@@ -57,6 +57,7 @@ interface Props {
   selectedHydrantId: number | null;
   firePoint: (FirePoint & { kind?: 'me' | 'address' | 'map'; accuracy?: number }) | null;
   routeCoordinates: [number, number][] | null;
+  routeDashed?: boolean;
   onHydrantClick: (h: Hydrant) => void;
   onMapClick: (pt: FirePoint) => void;
 }
@@ -68,6 +69,7 @@ export default function HydrantMap({
   selectedHydrantId,
   firePoint,
   routeCoordinates,
+  routeDashed = false,
   onHydrantClick,
   onMapClick
 }: Props) {
@@ -255,10 +257,15 @@ export default function HydrantMap({
     }
     if (!routeCoordinates || routeCoordinates.length < 2) return;
 
-    const line = L.polyline(routeCoordinates, { color: '#C62828', weight: 5, opacity: 0.85 }).addTo(layer);
+    // Google-Maps-style: a solid blue line for a real road route, or a dashed
+    // grey line when only the straight-line fallback is available.
+    const style: L.PolylineOptions = routeDashed
+      ? { color: '#5C6770', weight: 4, opacity: 0.85, dashArray: '2 12', lineCap: 'round' }
+      : { color: '#1A73E8', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
+    const line = L.polyline(routeCoordinates, style).addTo(layer);
     routeLineRef.current = line;
     map.fitBounds(line.getBounds(), { padding: [60, 60] });
-  }, [routeCoordinates]);
+  }, [routeCoordinates, routeDashed]);
 
   return <div ref={containerRef} className="absolute inset-0 bg-[#dce6ea]" />;
 }

@@ -5,6 +5,20 @@ const { geocodeAddress } = require('../../lib/geocode');
 
 const CANDIDATE_LIMIT = 5;
 
+// Straight-line (great-circle) distance in metres — used as a guaranteed
+// fallback when road routing (OSRM) is unavailable, so the client always has a
+// distance to show and a line to draw.
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 // Takes the N nearest-as-crow-flies hydrants (optionally filtered by an exact
 // fire_hydrant:diameter match for the selected vehicle's hose), road-routes
 // each via OSRM, and returns whichever is actually closest by road — not
@@ -68,14 +82,41 @@ module.exports = async function handler(req, res) {
   }
 
   // Road routing unavailable for every candidate — fall back to the closest
-  // straight-line match instead of failing the whole request.
-  if (!best) return res.status(200).json({ hydrant: candidates[0], route: null, point });
+  // straight-line match with a great-circle distance and a direct line to draw,
+  // instead of failing the whole request or returning nothing to show.
+  if (!best) {
+    const hydrant = candidates[0];
+    const to = { lat: Number(hydrant.lat), lon: Number(hydrant.lon) };
+    return res.status(200).json({
+      hydrant,
+      route: {
+        distance: haversineMeters(from, to),
+        duration: null,
+        coordinates: [
+          [from.lat, from.lon],
+          [to.lat, to.lon]
+        ],
+        straightLine: true
+      },
+      point
+    });
+  }
 
+  const to = { lat: Number(best.hydrant.lat), lon: Number(best.hydrant.lon) };
   try {
-    const withGeometry = await fetchRoadRouteWithGeometry(from, { lat: best.hydrant.lat, lon: best.hydrant.lon });
+    const withGeometry = await fetchRoadRouteWithGeometry(from, to);
     if (withGeometry) best.route = withGeometry;
   } catch {
     // keep the distance/duration we already have, just without a line to draw
+  }
+  best.route.straightLine = false;
+  // Road distance/duration is known but geometry fetch failed — still give the
+  // client a line (direct) so the route renders.
+  if (!best.route.coordinates) {
+    best.route.coordinates = [
+      [from.lat, from.lon],
+      [to.lat, to.lon]
+    ];
   }
 
   res.status(200).json({ ...best, point });

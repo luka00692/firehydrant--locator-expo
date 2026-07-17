@@ -43,6 +43,7 @@ export default function MapTab() {
     null
   );
   const [nearest, setNearest] = useState<NearestHydrantResult | null>(null);
+  const [showLocPrompt, setShowLocPrompt] = useState(false);
 
   // Load every hydrant once. They're drawn as individual canvas circle markers,
   // so the whole country's worth stays on the map at all zoom levels without lag
@@ -115,7 +116,10 @@ export default function MapTab() {
     }
   }
 
-  function useMyLocation() {
+  // Actually ask the browser for a position. Kept separate from useMyLocation so
+  // the confirm pop-up can trigger it after the user opts in.
+  function requestLocation() {
+    setShowLocPrompt(false);
     setNotFound(false);
     setLocError(null);
     if (!navigator.geolocation) {
@@ -131,18 +135,53 @@ export default function MapTab() {
           kind: 'me',
           accuracy: Math.min(pos.coords.accuracy || 60, 200)
         }),
-      () => {
+      (err) => {
         setSearching(false);
-        setLocError('Lokacije ni bilo mogoče pridobiti. Preveri dovoljenja za lokacijo v brskalniku.');
+        if (err.code === err.PERMISSION_DENIED) {
+          setLocError('Dostop do lokacije je zavrnjen. Omogoči ga v nastavitvah brskalnika in poskusi znova.');
+        } else if (err.code === err.TIMEOUT) {
+          setLocError('Določanje lokacije je trajalo predolgo. Poskusi znova.');
+        } else {
+          setLocError('Lokacije trenutno ni bilo mogoče določiti. Poskusi znova.');
+        }
       },
-      { timeout: 6000, enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
+  }
+
+  // Show a short explainer before the browser's native permission prompt (like
+  // Google Maps), unless permission is already granted (locate straight away)
+  // or already blocked (tell the user how to re-enable it).
+  async function useMyLocation() {
+    setNotFound(false);
+    setLocError(null);
+    if (!navigator.geolocation) {
+      setLocError('Ta brskalnik ne podpira določanja lokacije.');
+      return;
+    }
+    try {
+      const status = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
+      if (status?.state === 'granted') {
+        requestLocation();
+        return;
+      }
+      if (status?.state === 'denied') {
+        setLocError('Dostop do lokacije je zavrnjen. Omogoči ga v nastavitvah brskalnika in poskusi znova.');
+        return;
+      }
+    } catch {
+      // Permissions API unsupported (e.g. Safari) — fall through to the prompt.
+    }
+    setShowLocPrompt(true);
   }
 
   function openNav() {
     if (!nearest) return;
+    // Route from the user's current fire point to the hydrant, like Google Maps
+    // directions — falls back to destination-only if we don't have an origin.
+    const origin = firePoint ? `&origin=${firePoint.lat},${firePoint.lng}` : '';
     window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${nearest.hydrant.lat},${nearest.hydrant.lon}&travelmode=driving`,
+      `https://www.google.com/maps/dir/?api=1${origin}&destination=${nearest.hydrant.lat},${nearest.hydrant.lon}&travelmode=driving`,
       '_blank'
     );
   }
@@ -159,6 +198,7 @@ export default function MapTab() {
           selectedHydrantId={sel?.id ?? null}
           firePoint={firePoint}
           routeCoordinates={nearest?.route?.coordinates ?? null}
+          routeDashed={nearest?.route?.straightLine ?? false}
           onHydrantClick={(h) => searchNearest({ lat: h.lat, lng: h.lon })}
           onMapClick={(pt) => setFire({ ...pt, kind: 'map' })}
         />
@@ -289,7 +329,7 @@ export default function MapTab() {
               </div>
               <div className="flex-1">
                 <div className="text-lg font-bold text-[#4A1212]">{selType === 'nadzemni' ? 'Nadzemni hidrant' : 'Podzemni hidrant'}</div>
-                <div className="text-[13px] text-[#5C6770]">Hidrant · OSRM</div>
+                <div className="text-[13px] text-[#5C6770]">Najbližji hidrant</div>
               </div>
               <button onClick={() => setNearest(null)} className="bg-transparent border-none text-[#8A949E] text-2xl leading-none cursor-pointer">
                 ×
@@ -326,13 +366,17 @@ export default function MapTab() {
             {nearest?.route && (
               <div className="flex gap-3.5 bg-[#FCE7E7] rounded-[10px] px-3.5 py-3 mb-4">
                 <div>
-                  <div className="text-[11px] text-[#E57373] uppercase tracking-wide">Po cestah</div>
+                  <div className="text-[11px] text-[#E57373] uppercase tracking-wide">
+                    {nearest.route.straightLine ? 'Zračna razdalja' : 'Po cestah'}
+                  </div>
                   <div className="text-base font-bold text-[#8E1616]">{formatDistance(nearest.route.distance)}</div>
                 </div>
-                <div>
-                  <div className="text-[11px] text-[#E57373] uppercase tracking-wide">Čas vožnje</div>
-                  <div className="text-base font-bold text-[#8E1616]">{formatDuration(nearest.route.duration)}</div>
-                </div>
+                {nearest.route.duration != null && (
+                  <div>
+                    <div className="text-[11px] text-[#E57373] uppercase tracking-wide">Čas vožnje</div>
+                    <div className="text-base font-bold text-[#8E1616]">{formatDuration(nearest.route.duration)}</div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -346,6 +390,49 @@ export default function MapTab() {
               <button onClick={openNav} className="flex-1 bg-white text-[#4A1212] border border-[#D9DEE3] rounded-full py-3.5 font-semibold text-[15px] cursor-pointer">
                 Odpri navigacijo
               </button>
+            </div>
+          </div>
+        )}
+
+        {showLocPrompt && (
+          <div
+            className="absolute inset-0 z-[900] flex items-end justify-center"
+            style={{ background: 'rgba(0,48,64,.35)' }}
+            onClick={() => setShowLocPrompt(false)}
+          >
+            <div
+              className="w-full max-w-[420px] bg-white rounded-t-[22px] px-5 pt-5 pb-6"
+              style={{ boxShadow: '0 -12px 40px rgba(0,48,64,.25)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-[38px] h-1 rounded-full bg-[#D9DEE3] mx-auto mb-4" />
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-11 h-11 rounded-xl bg-[#FCE7E7] flex items-center justify-center flex-shrink-0">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="10" r="3" />
+                    <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                  </svg>
+                </div>
+                <div className="text-lg font-bold text-[#4A1212]">Deli svojo lokacijo</div>
+              </div>
+              <p className="text-[13px] leading-[1.5] text-[#5C6770] mb-5">
+                Za prikaz najbližjega hidranta in poti do njega potrebujemo dostop do tvoje lokacije. Brskalnik te bo
+                vprašal za dovoljenje.
+              </p>
+              <div className="flex gap-2.5">
+                <button
+                  onClick={() => setShowLocPrompt(false)}
+                  className="flex-1 bg-white text-[#4A1212] border border-[#D9DEE3] rounded-full py-3.5 font-semibold text-[15px] cursor-pointer"
+                >
+                  Prekliči
+                </button>
+                <button
+                  onClick={requestLocation}
+                  className="flex-1 bg-[#C62828] text-white border-none rounded-full py-3.5 font-semibold text-[15px] cursor-pointer"
+                >
+                  Deli lokacijo
+                </button>
+              </div>
             </div>
           </div>
         )}
