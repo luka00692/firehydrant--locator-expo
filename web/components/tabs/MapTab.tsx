@@ -24,7 +24,10 @@ function formatDistance(m: number | undefined | null) {
 
 function formatDuration(s: number | undefined | null) {
   if (s == null) return '—';
-  return s < 60 ? '<1 min' : `${Math.round(s / 60)} min`;
+  // A very short road route (e.g. across the street) still realistically
+  // takes a fire truck at least a minute to actually respond — never show
+  // less than that, matching src/hydrantUtils.js's formatMinutes.
+  return `${Math.max(1, Math.round(s / 60))} min`;
 }
 
 // Great-circle distance in metres — used to debounce live-tracking re-searches
@@ -118,6 +121,28 @@ export default function MapTab() {
             : 'V bližini ni bilo mogoče najti hidranta.'
         );
       }
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  // Clicking a specific hydrant on the map shows the route/distance/time from
+  // wherever the fire pin already is *to that exact hydrant* — not a fresh
+  // "nearest hydrant" search starting from the hydrant's own location, which
+  // would just find itself or a different, closer one instead.
+  async function selectHydrant(h: Hydrant) {
+    if (!firePoint) {
+      // No location set yet — show the hydrant's own info, no route to give.
+      setNearest({ hydrant: h, route: null });
+      return;
+    }
+    setSearching(true);
+    setNearest(null);
+    try {
+      const result = await api.routeToHydrant({ lat: firePoint.lat, lng: firePoint.lng }, h.id, activeVehicle?.premerCevi);
+      setNearest(result);
+    } catch {
+      setNearest({ hydrant: h, route: null });
     } finally {
       setSearching(false);
     }
@@ -266,7 +291,7 @@ export default function MapTab() {
           firePoint={firePoint}
           routeCoordinates={nearest?.route?.coordinates ?? null}
           routeDashed={nearest?.route?.straightLine ?? false}
-          onHydrantClick={(h) => searchNearest({ lat: h.lat, lng: h.lon })}
+          onHydrantClick={selectHydrant}
           onMapClick={(pt) => setFire({ ...pt, kind: 'map' })}
         />
 

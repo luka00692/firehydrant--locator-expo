@@ -34,7 +34,7 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
 
-  let { lat, lng, premer, address } = req.body || {};
+  let { lat, lng, premer, address, hydrantId } = req.body || {};
   let point;
   if (address) {
     try {
@@ -49,24 +49,39 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'lat and lng, or address, are required' });
   }
 
-  const params = [Number(lat), Number(lng)];
-  let diameterFilter = '';
-  if (premer !== undefined) {
-    params.push(String(premer));
-    diameterFilter = `AND properties->>'fire_hydrant:diameter' = $${params.length}`;
+  let candidates;
+  if (hydrantId !== undefined) {
+    // Route to this exact hydrant (e.g. the one just clicked on the map) —
+    // skip the nearest-candidates search entirely so we don't silently
+    // substitute a different, closer one.
+    const { rows } = await getPool().query(
+      `SELECT id, ST_Y(geom::geometry) AS lat, ST_X(geom::geometry) AS lon, properties FROM hydrants WHERE id = $1`,
+      [hydrantId]
+    );
+    candidates = rows;
+  } else {
+    const params = [Number(lat), Number(lng)];
+    let diameterFilter = '';
+    if (premer !== undefined) {
+      params.push(String(premer));
+      diameterFilter = `AND properties->>'fire_hydrant:diameter' = $${params.length}`;
+    }
+    params.push(CANDIDATE_LIMIT);
+
+    const { rows } = await getPool().query(
+      `SELECT id, ST_Y(geom::geometry) AS lat, ST_X(geom::geometry) AS lon, properties
+       FROM hydrants
+       WHERE true ${diameterFilter}
+       ORDER BY geom <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+       LIMIT $${params.length}`,
+      params
+    );
+    candidates = rows;
   }
-  params.push(CANDIDATE_LIMIT);
 
-  const { rows: candidates } = await getPool().query(
-    `SELECT id, ST_Y(geom::geometry) AS lat, ST_X(geom::geometry) AS lon, properties
-     FROM hydrants
-     WHERE true ${diameterFilter}
-     ORDER BY geom <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
-     LIMIT $${params.length}`,
-    params
-  );
-
-  if (!candidates.length) return res.status(404).json({ error: 'no matching hydrant found' });
+  if (!candidates.length) {
+    return res.status(404).json({ error: hydrantId !== undefined ? 'hydrant not found' : 'no matching hydrant found' });
+  }
 
   const from = { lat: Number(lat), lon: Number(lng) };
   let best = null;

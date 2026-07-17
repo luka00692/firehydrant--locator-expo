@@ -129,6 +129,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ...point, premer })
     }),
+  // Routes from a known point to one *specific* hydrant (e.g. one just
+  // clicked on the map), instead of searching for whichever is nearest —
+  // see backend/api/hydrants/nearest.js's hydrantId branch.
+  routeToHydrant: (point: { lat: number; lng: number }, hydrantId: number, premer?: number) =>
+    request<NearestHydrantResult>('/api/hydrants/nearest', {
+      method: 'POST',
+      body: JSON.stringify({ ...point, hydrantId, premer })
+    }),
   reportHydrant: (id: number, sporocilo: string) =>
     request<void>(`/api/hydrants/${id}/report`, { method: 'POST', body: JSON.stringify({ sporocilo }) }),
   // Geocoding is folded into /api/hydrants/nearest (see backend/README.md TODO)
