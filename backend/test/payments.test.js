@@ -12,8 +12,11 @@ process.env.DATABASE_URL =
 
 const { createMockRes } = require('./helpers/mockRes');
 const registerHandler = require('../api/auth/register');
+// checkout-session creation and the Stripe webhook are the same merged
+// handler now (told apart by the stripe-signature header) — see
+// backend/api/checkout/index.js.
 const checkoutHandler = require('../api/checkout/index');
-const webhookHandler = require('../api/webhooks/stripe');
+const webhookHandler = checkoutHandler;
 
 let pool;
 
@@ -49,10 +52,8 @@ async function registerUser(email, uporabnisko_ime) {
 test('POST /api/checkout 503s when Stripe is not configured', async () => {
   const { token } = await registerUser('nopay@example.com', 'nopay');
   const res = createMockRes();
-  await checkoutHandler(
-    { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: { tip: 'osnovni', st_sedezev: 1 } },
-    res
-  );
+  const payload = JSON.stringify({ tip: 'osnovni', st_sedezev: 1 });
+  await checkoutHandler(mockReqWithBody(Buffer.from(payload), { authorization: `Bearer ${token}` }), res);
   assert.equal(res.statusCode, 503);
 });
 
@@ -60,10 +61,8 @@ test('POST /api/checkout validates tip and st_sedezev once configured', async ()
   process.env.STRIPE_SECRET_KEY = 'sk_test_dummy';
   const { token } = await registerUser('badinput@example.com', 'badinput');
   const res = createMockRes();
-  await checkoutHandler(
-    { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: { tip: 'ne-obstaja', st_sedezev: 1 } },
-    res
-  );
+  const payload = JSON.stringify({ tip: 'ne-obstaja', st_sedezev: 1 });
+  await checkoutHandler(mockReqWithBody(Buffer.from(payload), { authorization: `Bearer ${token}` }), res);
   assert.equal(res.statusCode, 400);
 });
 

@@ -56,10 +56,11 @@ export default function GroupTab({ onRequestsChange }: { onRequestsChange: (coun
   }, [load]);
 
   async function approve(id: string) {
+    if (!group) return;
     setBusy(id);
     setError(null);
     try {
-      await api.approveMembership(id);
+      await api.approveMembership(group.id, id);
       await load();
     } catch (err) {
       setError(err instanceof ApiRequestError && err.status === 409 ? 'Paket je poln — ni prostih mest.' : 'Odobritev ni uspela.');
@@ -69,9 +70,10 @@ export default function GroupTab({ onRequestsChange }: { onRequestsChange: (coun
   }
 
   async function reject(id: string) {
+    if (!group) return;
     setBusy(id);
     try {
-      await api.rejectMembership(id);
+      await api.rejectMembership(group.id, id);
       await load();
     } finally {
       setBusy(null);
@@ -79,9 +81,10 @@ export default function GroupTab({ onRequestsChange }: { onRequestsChange: (coun
   }
 
   async function removeMember(id: string) {
+    if (!group) return;
     setBusy(id);
     try {
-      await api.removeMembership(id);
+      await api.removeMembership(group.id, id);
       await load();
     } finally {
       setBusy(null);
@@ -89,9 +92,10 @@ export default function GroupTab({ onRequestsChange }: { onRequestsChange: (coun
   }
 
   async function makeAdmin(id: string) {
+    if (!group) return;
     setBusy(id);
     try {
-      await api.setMembershipRole(id, 'admin');
+      await api.setMembershipRole(group.id, id, 'admin');
       await load();
     } finally {
       setBusy(null);

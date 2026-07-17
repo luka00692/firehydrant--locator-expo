@@ -10,7 +10,6 @@ process.env.DATABASE_URL =
   'postgres://postgres:hydrant@localhost:5432/hydrants_test';
 
 const { createMockRes } = require('./helpers/mockRes');
-const healthHandler = require('../api/health');
 const bboxHandler = require('../api/hydrants/index');
 const nearbyHandler = require('../api/hydrants/nearby');
 const byIdHandler = require('../api/hydrants/[id]');
@@ -38,13 +37,6 @@ beforeEach(async () => {
   `);
 });
 
-test('GET /api/health returns ok', async () => {
-  const res = createMockRes();
-  await healthHandler({ method: 'GET', query: {} }, res);
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, { status: 'ok' });
-});
-
 test('GET /api/hydrants filters by bbox', async () => {
   const res = createMockRes();
   await bboxHandler(
@@ -54,6 +46,17 @@ test('GET /api/hydrants filters by bbox', async () => {
   assert.equal(res.statusCode, 200);
   const ids = res.body.map((h) => Number(h.id)).sort();
   assert.deepEqual(ids, [1, 2]);
+});
+
+test('GET /api/hydrants?resync=1 rejects a bad CRON_SECRET', async () => {
+  process.env.CRON_SECRET = 'test-secret';
+  try {
+    const res = createMockRes();
+    await bboxHandler({ method: 'GET', query: { resync: '1' }, headers: { authorization: 'Bearer wrong' } }, res);
+    assert.equal(res.statusCode, 401);
+  } finally {
+    delete process.env.CRON_SECRET;
+  }
 });
 
 test('GET /api/hydrants requires bbox params', async () => {

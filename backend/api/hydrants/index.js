@@ -1,10 +1,32 @@
 const { getPool } = require('../../lib/db');
 const { applyCors } = require('../../lib/cors');
+const { fetchSloveniaHydrants } = require('../../lib/overpass');
+const { importHydrants } = require('../../scripts/importHydrants');
 
-// Hydrants within a map viewport, so clients don't fetch the whole country at once.
+// Hydrants within a map viewport, so clients don't fetch the whole country at
+// once — plus (via ?resync=1) the OSM resync job, triggered by Vercel Cron
+// (see vercel.json). Folded together (rather than a separate
+// /api/cron/resync route) to stay under the Hobby plan's 12-function
+// deploy cap, see backend/README.md TODO. Vercel Cron only sends GET
+// requests, hence the query param instead of a method check.
 module.exports = async function handler(req, res) {
   applyCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
+
+  if (req.query.resync !== undefined) {
+    if (process.env.CRON_SECRET) {
+      if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+        return res.status(401).json({ error: 'unauthorized' });
+      }
+    }
+    try {
+      const features = await fetchSloveniaHydrants();
+      const count = await importHydrants(getPool(), features);
+      return res.status(200).json({ imported: count });
+    } catch (err) {
+      return res.status(502).json({ error: 'overpass sync failed', detail: err.message });
+    }
+  }
 
   const { minLat, minLon, maxLat, maxLon } = req.query;
   if ([minLat, minLon, maxLat, maxLon].some((v) => v === undefined)) {

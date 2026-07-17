@@ -27,9 +27,17 @@ against it before `npm run import`.
 
 ## Endpoints
 
+Exactly 12 route files under `api/` — fits the Vercel Hobby plan's
+12-serverless-function cap with nothing excluded. Several logically-separate
+actions are folded into the same file (dispatched by query param, body field,
+or a signature header) specifically to stay under that cap — each is called
+out below; see the route consolidation TODO for the full rationale.
+
 Hydrants:
-- `GET /api/health`
 - `GET /api/hydrants?minLat&minLon&maxLat&maxLon` — hydrants in a map viewport
+- `GET /api/hydrants?resync=1` — folded-in OSM resync job (see
+  [Overpass re-sync](#overpass-re-sync)); everyone else
+  only ever calls the bbox form above
 - `GET /api/hydrants/nearby?lat&lon&limit` — nearest hydrants to a point
 - `GET /api/hydrants/:id`
 - `POST /api/hydrants/:id/report` — flag a hydrant's data as wrong/missing (body: `{ "sporocilo": "..." }`)
@@ -43,38 +51,47 @@ Auth (see [Auth](#auth) below):
 Payments (see [Payments](#payments) below):
 - `POST /api/checkout` — auth required, body `{ tip, st_sedezev }` → Stripe
   Checkout URL
-- `POST /api/webhooks/stripe` — Stripe calls this; records the purchased
-  `paket` on `checkout.session.completed`
+- `POST /api/checkout` — folded-in Stripe webhook, told apart from the above
+  by a `stripe-signature` header (Stripe calls this directly, not the app);
+  records the purchased `paket` on `checkout.session.completed`. Point
+  Stripe's webhook URL at `/api/checkout` once payments are configured.
 
 Groups / teams (auth required on all of these; `vloga` is `"admin"` or
 `"member"`, `status` is `"pending"`, `"approved"`, or `"rejected"`):
 - `POST /api/groups` — body `{ imeSkupine }`, consumes the caller's oldest
   unassigned `paket` and makes the caller `admin` / `GET /api/groups` (groups
   the caller belongs to)
+- `POST /api/groups` — folded-in join, body `{ join: { imeSkupine } }` →
+  (currently auto-approved, see the TODO) join request / `GET
+  /api/groups?imeSkupine=` — the caller polls their own request's status,
+  `404` if none exists
+- `POST /api/groups` — folded-in demo payment bypass, body
+  `{ fakePurchase: { tip, stSedezev } }` — see [Payments](#payments)
 - `GET /api/groups/:id` / `PATCH /api/groups/:id` — admin-only; body
   `{ ime?, lokacijaDoma?: { lat, lng } }` / `DELETE /api/groups/:id` — admin-only
-- `POST /api/groups/join` — body `{ imeSkupine }` → pending (`member`) join
-  request / `GET /api/groups/join?imeSkupine=` — the caller polls their own
-  request's status (`pending`/`approved`/`rejected`), `404` if none exists
-- `GET /api/groups/:id/requests` — admin-only, lists pending join requests
 - `GET /api/groups/:id/members` — any approved member can list the group's
   approved members
+- `GET /api/groups/:id/members?status=pending` — admin-only, folded-in list
+  of pending join requests
+- `PATCH /api/groups/:id/members?membershipId=<id>` — admin-only, body
+  `{ status: "approved" }` to accept a pending request (`409` if the group
+  has no free seat), `{ status: "rejected" }` to reject one, or
+  `{ vloga: "admin"|"member" }` to change a member's role
+- `DELETE /api/groups/:id/members?membershipId=<id>` — admin-only; removes an
+  approved member or rejects a pending request (an alternative to
+  `PATCH { status: "rejected" }`)
 - `GET|POST /api/groups/:id/vehicles` — any approved member can list, only an
   admin can add (body `{ ime, premerCevi }`)
-- `PATCH /api/memberships/:id` — admin-only, body `{ status: "approved" }` to
-  accept a pending request (`409` if the group has no free seat),
-  `{ status: "rejected" }` to reject one, or `{ vloga: "admin"|"member" }` to
-  change a member's role
-- `DELETE /api/memberships/:id` — admin-only; removes an approved member or
-  rejects a pending request (an alternative to `PATCH { status: "rejected" }`)
-- `PATCH /api/vehicles/:id` — admin-only, body `{ ime?, premerCevi? }`
-- `DELETE /api/vehicles/:id` — admin-only
+- `PATCH /api/groups/:id/vehicles?vehicleId=<id>` — admin-only, folded-in
+  update, body `{ ime?, premerCevi? }`
+- `DELETE /api/groups/:id/vehicles?vehicleId=<id>` — admin-only, folded-in removal
 
 Misc:
-- `GET /api/geocode?q=<address>` — address → `{ lat, lon }` (Nominatim,
-  Slovenia-scoped)
 - `POST /api/hydrants/nearest` — see
-  [Nearest-hydrant search](#nearest-hydrant-search) below
+  [Nearest-hydrant search](#nearest-hydrant-search) below; also accepts
+  `{ address, premer? }` instead of `{ lat, lng, premer? }` (folded-in
+  geocoding via Nominatim, Slovenia-scoped — the response echoes back the
+  resolved point as `point: { lat, lon }`)
 
 All `POST`/`PATCH` endpoints return `400` on missing fields or constraint
 violations (bad foreign key, invalid enum value, duplicate membership, etc.)
@@ -109,17 +126,23 @@ validates them; `lib/authz.js` checks group roles.
 ## Payments
 
 `POST /api/checkout` creates a Stripe Checkout session and needs
-`STRIPE_SECRET_KEY` set — it returns `503` without it. `POST
-/api/webhooks/stripe` needs `STRIPE_WEBHOOK_SECRET` (shown when you register
-this endpoint's URL in the Stripe dashboard) to verify the webhook signature;
-it's the only place a `paket` row actually gets created; `POST /api/checkout`
-only starts the payment. Optional `CHECKOUT_SUCCESS_URL`/`CHECKOUT_CANCEL_URL`
-env vars control where Stripe redirects afterwards. Pricing
-(`CENTS_PER_SEAT` in `api/checkout/index.js`) is a placeholder — update it
-once real prices are decided. None of this was reachable from this sandbox
-(outbound network to `api.stripe.com` is blocked here) — the webhook's
-signature verification is covered by tests since that's pure local crypto,
-but an actual live checkout has not been run end-to-end.
+`STRIPE_SECRET_KEY` set — it returns `503` without it. The same route also
+handles the Stripe webhook (told apart by a `stripe-signature` header, see
+the route consolidation TODO), which needs `STRIPE_WEBHOOK_SECRET` (shown
+when you register this endpoint's URL — `/api/checkout` — in the Stripe
+dashboard) to verify the webhook signature; it's the only place a `paket`
+row actually gets created from a real payment — `POST /api/checkout` only
+starts it. Optional `CHECKOUT_SUCCESS_URL`/`CHECKOUT_CANCEL_URL` env vars
+control where Stripe redirects afterwards. Tier pricing lives in
+`backend/lib/packageTiers.js` (shared with the fake-purchase bypass below).
+None of this was reachable from this sandbox (outbound network to
+`api.stripe.com` is blocked here) — the webhook's signature verification is
+covered by tests since that's pure local crypto, but an actual live checkout
+has not been run end-to-end.
+
+Right now the frontend doesn't call `/api/checkout` at all — see the
+fake-purchase demo bypass in the TODO section below; `POST /api/groups
+{fakePurchase}` records a `paket` directly without touching Stripe.
 
 ## Nearest-hydrant search
 
@@ -159,12 +182,14 @@ this to actually reach a phone. Until then these calls silently no-op
    function invocation opens its own connection; see `lib/db.js`).
 5. (Optional but recommended) Set a `CRON_SECRET` environment variable —
    Vercel Cron automatically sends it as `Authorization: Bearer <value>` on
-   its own requests, and `api/cron/resync.js` rejects any request missing a
-   matching header once the variable is set.
+   its own requests, and `GET /api/hydrants?resync=1` rejects any request
+   missing a matching header once the variable is set.
 
 ## Overpass re-sync
 
-`vercel.json` schedules `api/cron/resync.js` daily via Vercel Cron. It
+`vercel.json` schedules `GET /api/hydrants?resync=1` daily via Vercel Cron
+(folded into the hydrants-bbox route rather than its own file — see the
+route consolidation TODO — since Cron only ever sends GET requests). It
 queries the Overpass API for every `emergency=fire_hydrant` node in Slovenia
 and upserts them into `hydrants` using the same logic as
 `scripts/importHydrants.js`, so OSM edits eventually propagate without
@@ -201,23 +226,29 @@ The web build needs a Google Maps API key — set
 ## TODO — open for anyone to pick up
 
 - [x] Provision the Neon project and complete the Vercel deployment above. **Done** (2026-07-16): Neon DB provisioned, schema applied, hydrants imported, test data seeded. Backend deployed to https://ph-slo-api.vercel.app, web to https://ph-slo.vercel.app (the `ph-slo` project was renamed to `ph-slo-api` to free up the bare domain for the web frontend).
-- [ ] **Revert auto-approval and auto-creation of join requests.** `/api/groups/join.js` currently inserts new memberships with `status: 'approved'` directly, instead of `'pending'`, since `/api/memberships/:id` (the admin approve/reject endpoint) is excluded from the deploy — see the route consolidation TODO below. It also silently creates a new `skupina` (as the requester's group, with them as `admin`) whenever the typed name doesn't match an existing one, instead of 404ing, so testers can always get into the app regardless of what they type. Revert both once real group/membership management is back in place.
-- [ ] **Consolidate API routes.** The Hobby plan caps a deployment at 12 serverless functions. `api/vehicles/[id]` was folded into `api/groups/[id]/vehicles.js` (dispatches PATCH/DELETE via a `?vehicleId=` query param), and `api/geocode.js` into `api/hydrants/nearest.js` (accepts `{address}` as well as `{lat,lng}`), each freeing a slot since those features were silently broken in production otherwise. Still excluded via `.vercelignore`: `checkout`, `webhooks/stripe`, `cron/resync`, `groups/[id]/requests`, `memberships/[id]`, and `health.js` (ops-only, not called by the frontend) — and `vercel.json`'s `crons` array is emptied since it pointed at the excluded resync route. Fold the rest in the same way, or upgrade the Vercel account to Pro and remove `.vercelignore` + restore the crons entry.
-- [ ] **Revert the fake-purchase demo bypass.** `POST /api/groups` accepts `{fakePurchase: {tip, stSedezev}}`, which records a `paket` directly (bypassing `/api/checkout`/Stripe entirely, see `backend/lib/packageTiers.js`) since real payments aren't configured and `/api/checkout` is excluded from the deploy anyway. `web/components/screens/PackagesScreen.tsx`'s "Nadaljuj na plačilo" button uses this instead of `api.checkout`. Switch it back once Stripe is actually wired up.
+- [x] **Consolidate API routes.** **Done** (2026-07-17): the Hobby plan caps a deployment at 12 serverless functions and this repo had 18 route files under `api/`. All of them now fit without excluding anything:
+      - `api/vehicles/[id]` folded into `api/groups/[id]/vehicles.js` (PATCH/DELETE via `?vehicleId=`)
+      - `api/geocode.js` folded into `api/hydrants/nearest.js` (accepts `{address}` as well as `{lat,lng}`, echoes back the resolved point)
+      - `api/groups/join.js` folded into `api/groups/index.js` (POST `{join:{imeSkupine}}`, GET `?imeSkupine=`)
+      - `api/groups/[id]/requests.js` and `api/memberships/[id].js` folded into `api/groups/[id]/members.js` (GET `?status=pending`, PATCH/DELETE via `?membershipId=`)
+      - `api/webhooks/stripe.js` folded into `api/checkout/index.js` (told apart by the `stripe-signature` header; point Stripe's webhook URL at `/api/checkout` once configured)
+      - `api/cron/resync.js` folded into `api/hydrants/index.js` (`?resync=1`, since Vercel Cron only sends GET) — `vercel.json`'s `crons` entry now points there and runs for real
+      - `api/health.js` deleted outright (unused by the frontend)
+      `.vercelignore` is gone — nothing is excluded from the deploy anymore. If new routes get added later and this becomes an issue again, upgrading to Vercel Pro removes the cap entirely instead of requiring more of this.
+- [ ] **Revert auto-approval and auto-creation of join requests.** `POST /api/groups {join}` currently inserts new memberships with `status: 'approved'` directly, instead of `'pending'` for admin review via `PATCH /api/groups/:id/members?membershipId=...`. It also silently creates a new `skupina` (as the requester's group, with them as `admin`) whenever the typed name doesn't match an existing one, instead of 404ing, so testers can always get into the app regardless of what they type. Revert both once real group/membership management workflows matter more than frictionless demo access.
+- [ ] **Revert the fake-purchase demo bypass.** `POST /api/groups` accepts `{fakePurchase: {tip, stSedezev}}`, which records a `paket` directly (bypassing `/api/checkout`/Stripe entirely, see `backend/lib/packageTiers.js`) since real payments aren't configured yet. `web/components/screens/PackagesScreen.tsx`'s "Nadaljuj na plačilo" button uses this instead of `api.checkout`. Switch it back once Stripe is actually wired up (set `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` and point Stripe's webhook at `/api/checkout`).
 - [ ] Real Google/Apple sign-in (needs registering OAuth apps + client
       credentials) and/or a magic-link email step for the "email" method
       (needs an email-sending provider) — `/api/auth/register` is a
       passwordless placeholder today, see [Auth](#auth).
-- [ ] Wire up Stripe: set `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`,
-      register the webhook URL in the Stripe dashboard, decide real pricing.
-- [ ] Frontend work: none of `/api/auth/*`, `/api/checkout`, `/api/groups/*`,
-      `/api/memberships/:id`, `/api/vehicles/:id`, `/api/geocode`, or
-      `/api/hydrants/nearest` are called from the Expo app yet — it still
-      only uses the hydrant browsing/report endpoints from before this
-      workflow spec.
+- [ ] Frontend work: none of `/api/auth/*`, `/api/checkout`, `/api/groups/*`
+      (join/members/vehicles included), or `/api/hydrants/nearest` are called
+      from the Expo app yet — it still only uses the hydrant browsing/report
+      endpoints from before this workflow spec.
 - [ ] Register each device's Expo push token against its user so
       `lib/push.js` notifications actually reach a phone (see
       [Push notifications](#push-notifications)).
-- [ ] Live-verify `/api/hydrants/nearest` (OSRM) and `/api/geocode`
-      (Nominatim) once deployed — both were implemented against docs only,
-      since outbound network to either is blocked in this dev sandbox.
+- [ ] Live-verify `/api/hydrants/nearest`'s road-routing (OSRM) and its
+      `{address}` lookup (Nominatim) once deployed — both were implemented
+      against docs only, since outbound network to either is blocked in this
+      dev sandbox.

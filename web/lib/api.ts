@@ -73,26 +73,35 @@ export const api = {
     request<Group>(`/api/groups/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteGroup: (id: string) => request<void>(`/api/groups/${id}`, { method: 'DELETE' }),
 
+  // join, and polling a join request's status, are folded into POST/GET
+  // /api/groups (see backend/README.md TODO) rather than their own route.
   joinGroup: (imeSkupine: string) =>
-    request<Membership>('/api/groups/join', { method: 'POST', body: JSON.stringify({ imeSkupine }) }),
+    request<Membership>('/api/groups', { method: 'POST', body: JSON.stringify({ join: { imeSkupine } }) }),
   myJoinStatus: (imeSkupine: string) =>
-    request<Membership>(`/api/groups/join?imeSkupine=${encodeURIComponent(imeSkupine)}`),
+    request<Membership>(`/api/groups?imeSkupine=${encodeURIComponent(imeSkupine)}`),
 
-  pendingRequests: (groupId: string) => request<JoinRequest[]>(`/api/groups/${groupId}/requests`),
+  // Pending requests, and per-membership approve/reject/remove/role-change,
+  // are folded into /api/groups/:id/members (via ?status=pending and
+  // ?membershipId=) rather than their own routes.
+  pendingRequests: (groupId: string) => request<JoinRequest[]>(`/api/groups/${groupId}/members?status=pending`),
   members: (groupId: string) => request<JoinRequest[]>(`/api/groups/${groupId}/members`),
-  approveMembership: (id: string) =>
-    request<Membership>(`/api/memberships/${id}`, {
+  approveMembership: (groupId: string, id: string) =>
+    request<Membership>(`/api/groups/${groupId}/members?membershipId=${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'approved' })
     }),
-  rejectMembership: (id: string) =>
-    request<Membership>(`/api/memberships/${id}`, {
+  rejectMembership: (groupId: string, id: string) =>
+    request<Membership>(`/api/groups/${groupId}/members?membershipId=${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'rejected' })
     }),
-  removeMembership: (id: string) => request<void>(`/api/memberships/${id}`, { method: 'DELETE' }),
-  setMembershipRole: (id: string, vloga: 'admin' | 'member') =>
-    request<Membership>(`/api/memberships/${id}`, { method: 'PATCH', body: JSON.stringify({ vloga }) }),
+  removeMembership: (groupId: string, id: string) =>
+    request<void>(`/api/groups/${groupId}/members?membershipId=${id}`, { method: 'DELETE' }),
+  setMembershipRole: (groupId: string, id: string, vloga: 'admin' | 'member') =>
+    request<Membership>(`/api/groups/${groupId}/members?membershipId=${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ vloga })
+    }),
 
   vehicles: (groupId: string) => request<Vehicle[]>(`/api/groups/${groupId}/vehicles`),
   addVehicle: (groupId: string, ime: string, premerCevi: number) =>

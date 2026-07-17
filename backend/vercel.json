@@ -1,3 +1,8 @@
 {
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/hydrants?resync=1",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

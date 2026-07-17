@@ -3,9 +3,13 @@ const { applyCors } = require('../../lib/cors');
 const { respondIfDbError } = require('../../lib/dbError');
 const { requireAuth } = require('../../lib/auth');
 const { validateTier, tierRangeError } = require('../../lib/packageTiers');
+const { sendPushNotification } = require('../../lib/push');
 
 const SELECT_FIELDS = `id, lastnik_id AS "lastnikId", ime, st_sedezev AS "stSedezev", created_at AS "createdAt",
   ST_Y(lokacija_doma::geometry) AS lat, ST_X(lokacija_doma::geometry) AS lng`;
+
+const MEMBERSHIP_FIELDS = `id, uporabnik_id AS "uporabnikId", skupina_id AS "skupinaId", vloga, status,
+  created_at AS "createdAt"`;
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -17,7 +21,7 @@ module.exports = async function handler(req, res) {
   const pool = getPool();
 
   if (req.method === 'POST') {
-    const { imeSkupine, fakePurchase } = req.body || {};
+    const { imeSkupine, fakePurchase, join } = req.body || {};
 
     // TEMPORARY demo bypass: /api/checkout (real Stripe) is excluded from the
     // deploy anyway (see backend/README.md TODO) and Stripe isn't configured,
@@ -36,6 +40,75 @@ module.exports = async function handler(req, res) {
            RETURNING id, kupec_id AS "kupecId", skupina_id AS "skupinaId", tip, st_sedezev AS "stSedezev", created_at AS "createdAt"`,
           [user.id, tip, stSedezev]
         );
+        return res.status(201).json(rows[0]);
+      } catch (err) {
+        if (respondIfDbError(res, err)) return;
+        throw err;
+      }
+    }
+
+    // A guest requests to join a group by name — folded in here (rather than
+    // a separate /api/groups/join route) to stay under the Hobby plan's
+    // 12-function deploy cap, see backend/README.md TODO.
+    if (join) {
+      const { imeSkupine: joinIme } = join;
+      if (!joinIme) return res.status(400).json({ error: 'imeSkupine is required' });
+
+      // The app only shows a user their first group (see web/lib/app-state.tsx),
+      // so a user belonging to more than one would silently lose access to the
+      // rest — block joining/requesting a second group while already in one.
+      const { rows: existing } = await pool.query(
+        `SELECT 1 FROM clanstvo WHERE uporabnik_id = $1 AND status IN ('pending', 'approved') LIMIT 1`,
+        [user.id]
+      );
+      if (existing[0]) {
+        return res.status(400).json({ error: 'already a member of (or already requested) a group' });
+      }
+
+      const { rows: groups } = await pool.query(`SELECT * FROM skupina WHERE ime = $1`, [joinIme]);
+      let group = groups[0];
+
+      try {
+        // TEMPORARY: auto-approved on creation (rather than landing in
+        // 'pending' for admin review) since the endpoint that would otherwise
+        // approve/reject it is a lower priority than getting testers into the
+        // app. Also auto-creates the group (as the requester's admin) when the
+        // typed name doesn't match an existing one, instead of 404ing.
+        // Revert both once real group/membership management workflows matter
+        // more than frictionless demo access — see backend/README.md TODO.
+        let vloga = 'member';
+        if (!group) {
+          const { rows: createdGroups } = await pool.query(
+            `INSERT INTO skupina (lastnik_id, ime, st_sedezev) VALUES ($1, $2, 0) RETURNING *`,
+            [user.id, joinIme]
+          );
+          group = createdGroups[0];
+          vloga = 'admin';
+        }
+
+        const { rows } = await pool.query(
+          `INSERT INTO clanstvo (uporabnik_id, skupina_id, vloga, status)
+           VALUES ($1, $2, $3, 'approved') RETURNING ${MEMBERSHIP_FIELDS}`,
+          [user.id, group.id, vloga]
+        );
+
+        const { rows: owners } = await pool.query(
+          `SELECT u.push_token FROM uporabnik u
+           JOIN clanstvo c ON c.uporabnik_id = u.id
+           WHERE c.skupina_id = $1 AND c.vloga = 'admin' AND c.status = 'approved' AND u.id != $2`,
+          [group.id, user.id]
+        );
+        await Promise.all(
+          owners.map((owner) =>
+            sendPushNotification(
+              owner.push_token,
+              'Nov član skupine',
+              `${user.uporabnisko_ime} se je pridružil skupini ${group.ime}.`,
+              { skupinaId: group.id }
+            )
+          )
+        );
+
         return res.status(201).json(rows[0]);
       } catch (err) {
         if (respondIfDbError(res, err)) return;
@@ -94,6 +167,22 @@ module.exports = async function handler(req, res) {
     } finally {
       client.release();
     }
+  }
+
+  // GET ?imeSkupine=... — folded-in poll for a guest's own join request
+  // status (pending/approved/rejected) by group name, e.g. from a "waiting
+  // for approval" screen.
+  if (req.query.imeSkupine) {
+    const { rows } = await pool.query(
+      `SELECT c.id, c.uporabnik_id AS "uporabnikId", c.skupina_id AS "skupinaId", c.vloga, c.status,
+              c.created_at AS "createdAt"
+       FROM clanstvo c
+       JOIN skupina s ON s.id = c.skupina_id
+       WHERE c.uporabnik_id = $1 AND s.ime = $2`,
+      [user.id, req.query.imeSkupine]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'no membership request found for that group' });
+    return res.status(200).json(rows[0]);
   }
 
   // GET — groups the caller has an approved membership in.
