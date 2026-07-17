@@ -60,7 +60,14 @@ export interface Hydrant {
 
 export interface NearestHydrantResult {
   hydrant: Hydrant;
-  route: { distance: number; duration: number; coordinates?: [number, number][] } | null;
+  route: {
+    distance: number;
+    /** Road driving time in seconds; null when only a straight-line fallback is available. */
+    duration: number | null;
+    coordinates?: [number, number][];
+    /** true when OSRM road routing was unavailable and this is a direct-line fallback. */
+    straightLine?: boolean;
+  } | null;
   point?: { lat: number; lon: number };
 }
 

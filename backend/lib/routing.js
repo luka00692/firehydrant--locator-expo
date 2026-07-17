@@ -1,13 +1,25 @@
 const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
+const DEFAULT_TIMEOUT_MS = 4000;
 
-// Road distance/duration between two points, server-side — the mobile app
-// used to call OSRM directly (src/routing.js); the /api/hydrants/nearest
-// workflow needs the same thing from the backend to rank candidates by road
-// distance instead of straight-line distance. No geometry here — cheap to
-// call once per candidate.
+// The public OSRM demo server is rate-limited and occasionally slow/unreachable.
+// Abort each call after a short timeout so one hung request can't stall the
+// whole nearest-hydrant workflow (the caller falls back to straight-line).
+async function fetchWithTimeout(url, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'firehydrant-locator-expo' } });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Road distance/duration between two points, server-side — used to rank
+// candidates by road distance instead of straight-line distance. No geometry
+// here — cheap to call once per candidate.
 async function fetchRoadRoute(from, to) {
   const url = `${OSRM_URL}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
 
   const data = await res.json();
@@ -20,7 +32,7 @@ async function fetchRoadRoute(from, to) {
 // full geometry is too expensive to fetch for every candidate.
 async function fetchRoadRouteWithGeometry(from, to) {
   const url = `${OSRM_URL}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
 
   const data = await res.json();
