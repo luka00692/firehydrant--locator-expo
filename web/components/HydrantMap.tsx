@@ -25,8 +25,8 @@ const SELECTED_COLOR = '#4A1212';
 // wide area but big and easy to pick out (and tap) when you zoom into a
 // precise spot. Below zoom 12 they stay compact.
 function radiusForZoom(zoom: number, selected: boolean): number {
-  const base = zoom <= 12 ? 5 : Math.min(5 + (zoom - 12) * 1.6, 14);
-  return selected ? base + 3 : base;
+  const base = zoom <= 12 ? 5 : Math.min(5 + (zoom - 12) * 2.8, 24);
+  return selected ? base + 4 : base;
 }
 
 // Every hydrant is a canvas circle marker (not a DOM/SVG pin). All of them draw
