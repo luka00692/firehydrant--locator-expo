@@ -23,7 +23,11 @@ export default function GroupNewScreen() {
       await refreshGroup();
       setScreen('app');
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Ustvarjanje skupine ni uspelo.');
+      if (err instanceof ApiRequestError && err.status === 400 && err.message.includes('already a member')) {
+        setError('Že si del ene skupine — nove skupine ni mogoče ustvariti.');
+      } else {
+        setError(err instanceof ApiRequestError ? err.message : 'Ustvarjanje skupine ni uspelo.');
+      }
     } finally {
       setLoading(false);
     }

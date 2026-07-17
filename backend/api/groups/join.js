@@ -44,6 +44,17 @@ module.exports = async function handler(req, res) {
   const { imeSkupine } = req.body || {};
   if (!imeSkupine) return res.status(400).json({ error: 'imeSkupine is required' });
 
+  // The app only shows a user their first group (see web/lib/app-state.tsx),
+  // so a user belonging to more than one would silently lose access to the
+  // rest — block joining/requesting a second group while already in one.
+  const { rows: existing } = await pool.query(
+    `SELECT 1 FROM clanstvo WHERE uporabnik_id = $1 AND status IN ('pending', 'approved') LIMIT 1`,
+    [user.id]
+  );
+  if (existing[0]) {
+    return res.status(400).json({ error: 'already a member of (or already requested) a group' });
+  }
+
   const { rows: groups } = await pool.query(`SELECT * FROM skupina WHERE ime = $1`, [imeSkupine]);
   const group = groups[0];
   if (!group) return res.status(404).json({ error: 'group not found' });
