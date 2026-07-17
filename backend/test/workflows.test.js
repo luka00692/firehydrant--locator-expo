@@ -79,12 +79,6 @@ test('POST /api/auth/register is idempotent for the same email (login, not dupli
   assert.equal(first.user.id, second.user.id);
 });
 
-test('POST /api/auth/register rejects a non-Gmail address', async () => {
-  const res = createMockRes();
-  await registerHandler({ method: 'POST', body: { email: 'someone@example.com', uporabniskoIme: 'someone' } }, res);
-  assert.equal(res.statusCode, 400);
-});
-
 test('GET /api/auth/session 401s without a token', async () => {
   const res = createMockRes();
   await sessionHandler({ method: 'GET', headers: {} }, res);

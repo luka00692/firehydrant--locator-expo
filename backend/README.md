@@ -117,9 +117,7 @@ placeholder — a real launch needs either a magic-link email step (needs an
 email-sending provider) or actual Google/Apple OAuth (needs registering
 OAuth apps with those platforms and setting their client credentials as env
 vars — neither is implemented here). `nacin_prijave` values other than
-`"email"` currently return `501`. As a stand-in for real "Sign in with
-Google", the email must also end in `@gmail.com` (`400` otherwise) — see the
-TODO section.
+`"email"` currently return `501`.
 
 Sessions are opaque tokens in the `session` table, sent back as
 `Authorization: Bearer <token>` on every authenticated request. `lib/auth.js`
@@ -242,10 +240,7 @@ The web build needs a Google Maps API key — set
 - [ ] Real Google/Apple sign-in (needs registering OAuth apps + client
       credentials) and/or a magic-link email step for the "email" method
       (needs an email-sending provider) — `/api/auth/register` is a
-      passwordless placeholder today, see [Auth](#auth). In lieu of real
-      "Sign in with Google", `/api/auth/register` currently just requires the
-      email to end in `@gmail.com` (also enforced client-side in
-      `AuthScreen.tsx`) — replace with the real OAuth flow once it's set up.
+      passwordless placeholder today, see [Auth](#auth).
 - [ ] Frontend work: none of `/api/auth/*`, `/api/checkout`, `/api/groups/*`
       (join/members/vehicles included), or `/api/hydrants/nearest` are called
       from the Expo app yet — it still only uses the hydrant browsing/report

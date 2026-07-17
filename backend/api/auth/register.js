@@ -19,11 +19,6 @@ module.exports = async function handler(req, res) {
   if (nacinPrijave && nacinPrijave !== 'email') {
     return res.status(501).json({ error: `nacinPrijave "${nacinPrijave}" is not implemented — only "email" works today` });
   }
-  // TEMPORARY: only Gmail addresses accepted, in lieu of real "Sign in with
-  // Google" (which needs a registered OAuth app) — see backend/README.md TODO.
-  if (!/^[^@\s]+@gmail\.com$/i.test(email)) {
-    return res.status(400).json({ error: 'only @gmail.com addresses are accepted' });
-  }
 
   const pool = getPool();
   try {

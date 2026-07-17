@@ -14,15 +14,8 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
 
   async function submit() {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
+    if (!email.trim()) {
       setError('Vnesi e-pošto.');
-      return;
-    }
-    // TEMPORARY: only Gmail addresses accepted, in lieu of real "Sign in with
-    // Google" (which needs a registered OAuth app) — see backend/README.md TODO.
-    if (!/^[^@\s]+@gmail\.com$/i.test(trimmedEmail)) {
-      setError('Prijava je mogoča samo z Gmail naslovom (@gmail.com).');
       return;
     }
     setError(null);
@@ -81,11 +74,11 @@ export default function AuthScreen() {
         </>
       )}
 
-      <label className="text-[13px] font-semibold text-[#2F3940] mb-1.5 block">Gmail e-pošta</label>
+      <label className="text-[13px] font-semibold text-[#2F3940] mb-1.5 block">E-pošta</label>
       <input
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="ime@gmail.com"
+        placeholder="ime@gasilci.si"
         className="w-full px-4 py-3.5 border border-[#D9DEE3] rounded-lg text-[15px] mb-4 text-[#4A1212]"
       />
       <label className="text-[13px] font-semibold text-[#2F3940] mb-1.5 block">Geslo</label>
@@ -97,7 +90,7 @@ export default function AuthScreen() {
         className="w-full px-4 py-3.5 border border-[#D9DEE3] rounded-lg text-[15px] mb-2 text-[#4A1212]"
       />
       <p className="text-[12px] text-[#8A949E] mb-5">
-        Prototip nima gesel — vpiši samo Gmail e-pošto, ostalo je za prihodnjo verzijo.
+        Prototip nima gesel — vpiši samo e-pošto, ostalo je za prihodnjo verzijo.
       </p>
 
       {error && <p className="text-[13px] text-[#8E1616] mb-4">{error}</p>}
