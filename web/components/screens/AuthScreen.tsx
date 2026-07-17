@@ -99,30 +99,9 @@ export default function AuthScreen() {
         onClick={submit}
         disabled={loading}
         data-testid="auth-submit"
-        className="w-full bg-[#C62828] text-white rounded-full py-4 font-semibold text-base mb-5 cursor-pointer disabled:opacity-60"
+        className="w-full bg-[#C62828] text-white rounded-full py-4 font-semibold text-base cursor-pointer disabled:opacity-60"
       >
         {loading ? 'Nalagam …' : mode === 'login' ? 'Prijava' : 'Registracija'}
-      </button>
-
-      <div className="flex items-center gap-3 text-[#8A949E] text-[13px] mb-5">
-        <span className="flex-1 h-px bg-[#ECEFF2]" />
-        ali
-        <span className="flex-1 h-px bg-[#ECEFF2]" />
-      </div>
-
-      <button
-        disabled
-        title="Ni na voljo — potrebuje registracijo Google OAuth aplikacije"
-        className="w-full bg-white text-[#4A1212] border border-[#D9DEE3] rounded-full py-3.5 font-semibold text-[15px] mb-3 flex items-center justify-center gap-2.5 opacity-50 cursor-not-allowed"
-      >
-        Nadaljuj z Googlom
-      </button>
-      <button
-        disabled
-        title="Ni na voljo — potrebuje registracijo Apple Sign in with Apple"
-        className="w-full bg-black text-white rounded-full py-3.5 font-semibold text-[15px] flex items-center justify-center gap-2.5 opacity-50 cursor-not-allowed"
-      >
-        Nadaljuj z Applom
       </button>
     </div>
   );
