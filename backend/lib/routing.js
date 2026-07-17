@@ -27,21 +27,73 @@ async function fetchRoadRoute(from, to) {
   return { distance: data.routes[0].distance, duration: data.routes[0].duration };
 }
 
-// Same as fetchRoadRoute but also returns the route's line geometry, for
-// drawing the path on a map. Only call this once, for the winning candidate —
-// full geometry is too expensive to fetch for every candidate.
+// Turn an OSRM step maneuver into a short Slovenian instruction. OSRM returns
+// structured maneuvers (type + modifier + street name), not prose, so we map
+// them to human text for basic turn-by-turn.
+const DIR = {
+  left: 'levo',
+  right: 'desno',
+  'slight left': 'rahlo levo',
+  'slight right': 'rahlo desno',
+  'sharp left': 'ostro levo',
+  'sharp right': 'ostro desno',
+  straight: 'naravnost',
+  uturn: 'nazaj (polkrožno)'
+};
+
+function formatStep(step) {
+  const m = step.maneuver || {};
+  const road = step.name ? ` na ${step.name}` : '';
+  const dir = DIR[m.modifier] || m.modifier || '';
+  switch (m.type) {
+    case 'depart':
+      return `Začni pot${road}`;
+    case 'arrive':
+      return 'Prihod do hidranta';
+    case 'turn':
+      return `Zavij ${dir}${road}`.trim();
+    case 'continue':
+      return `Nadaljuj ${dir || 'naravnost'}${road}`.trim();
+    case 'new name':
+      return `Nadaljuj${road}`;
+    case 'merge':
+      return `Priključi se${road}`;
+    case 'ramp':
+    case 'on ramp':
+      return `Zapelji na uvoz${road}`;
+    case 'off ramp':
+      return `Zapelji na izvoz${road}`;
+    case 'fork':
+      return `Na razcepu ${dir || 'naravnost'}${road}`.trim();
+    case 'end of road':
+      return `Na koncu ceste zavij ${dir}${road}`.trim();
+    case 'roundabout':
+    case 'rotary':
+      return `V krožišču izberi ${m.exit ? `${m.exit}. izhod` : 'izhod'}${road}`;
+    default:
+      return `Nadaljuj${road}`;
+  }
+}
+
+// Same as fetchRoadRoute but also returns the route's line geometry (for drawing
+// the path) and step-by-step instructions. Only call this once, for the winning
+// candidate — full geometry is too expensive to fetch for every candidate.
 async function fetchRoadRouteWithGeometry(from, to) {
-  const url = `${OSRM_URL}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
+  const url = `${OSRM_URL}/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson&steps=true`;
   const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
 
   const data = await res.json();
   if (!data.routes?.length) return null;
   const route = data.routes[0];
+  const steps = (route.legs?.[0]?.steps || [])
+    .map((s) => ({ text: formatStep(s), distance: s.distance }))
+    .filter((s) => s.text);
   return {
     distance: route.distance,
     duration: route.duration,
-    coordinates: route.geometry.coordinates.map(([lon, lat]) => [lat, lon])
+    coordinates: route.geometry.coordinates.map(([lon, lat]) => [lat, lon]),
+    steps
   };
 }
 

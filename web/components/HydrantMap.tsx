@@ -84,6 +84,11 @@ export default function HydrantMap({
   const fireMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
+  // Track the previous fire-point kind and the current route's destination so we
+  // can move the live "me" dot smoothly (without recentering on every GPS tick)
+  // and only refit the map when the routed hydrant actually changes.
+  const prevFireKindRef = useRef<string | undefined>(undefined);
+  const lastRouteEndRef = useRef<string | null>(null);
 
   // hydrant markers kept keyed by id so we can diff (add/remove only the delta)
   // instead of rebuilding the whole set when the filter changes.
@@ -217,6 +222,46 @@ export default function HydrantMap({
     const layer = overlayLayerRef.current;
     if (!map || !layer) return;
 
+    if (!firePoint) {
+      if (fireMarkerRef.current) {
+        layer.removeLayer(fireMarkerRef.current);
+        fireMarkerRef.current = null;
+      }
+      if (accuracyCircleRef.current) {
+        layer.removeLayer(accuracyCircleRef.current);
+        accuracyCircleRef.current = null;
+      }
+      prevFireKindRef.current = undefined;
+      return;
+    }
+
+    const pos: [number, number] = [firePoint.lat, firePoint.lng];
+    // A continuous live update (me → me while a marker already exists) just
+    // moves the existing dot; a fresh point rebuilds the marker and recenters.
+    const isLiveMove = prevFireKindRef.current === 'me' && firePoint.kind === 'me' && !!fireMarkerRef.current;
+    prevFireKindRef.current = firePoint.kind;
+
+    if (isLiveMove && fireMarkerRef.current) {
+      fireMarkerRef.current.setLatLng(pos);
+      if (firePoint.accuracy) {
+        if (accuracyCircleRef.current) {
+          accuracyCircleRef.current.setLatLng(pos);
+          accuracyCircleRef.current.setRadius(firePoint.accuracy);
+        } else {
+          accuracyCircleRef.current = L.circle(pos, {
+            radius: firePoint.accuracy,
+            color: '#C62828',
+            weight: 1,
+            fillColor: '#C62828',
+            fillOpacity: 0.08
+          }).addTo(layer);
+        }
+      }
+      // Keep the dot on screen while walking, but don't yank the map around.
+      if (!map.getBounds().contains(pos)) map.panTo(pos, { animate: true });
+      return;
+    }
+
     if (fireMarkerRef.current) {
       layer.removeLayer(fireMarkerRef.current);
       fireMarkerRef.current = null;
@@ -225,24 +270,21 @@ export default function HydrantMap({
       layer.removeLayer(accuracyCircleRef.current);
       accuracyCircleRef.current = null;
     }
-    if (!firePoint) return;
 
     const icon = firePoint.kind === 'me' ? meIcon() : fireIcon();
-    const marker = L.marker([firePoint.lat, firePoint.lng], { icon, zIndexOffset: 1000 }).addTo(layer);
-    fireMarkerRef.current = marker;
+    fireMarkerRef.current = L.marker(pos, { icon, zIndexOffset: 1000 }).addTo(layer);
 
     if (firePoint.kind === 'me' && firePoint.accuracy) {
-      const circle = L.circle([firePoint.lat, firePoint.lng], {
+      accuracyCircleRef.current = L.circle(pos, {
         radius: firePoint.accuracy,
         color: '#C62828',
         weight: 1,
         fillColor: '#C62828',
         fillOpacity: 0.08
       }).addTo(layer);
-      accuracyCircleRef.current = circle;
     }
 
-    map.flyTo([firePoint.lat, firePoint.lng], 14, { duration: 0.8 });
+    map.flyTo(pos, 14, { duration: 0.8 });
   }, [firePoint]);
 
   // route polyline
@@ -264,7 +306,15 @@ export default function HydrantMap({
       : { color: '#1A73E8', weight: 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
     const line = L.polyline(routeCoordinates, style).addTo(layer);
     routeLineRef.current = line;
-    map.fitBounds(line.getBounds(), { padding: [60, 60] });
+
+    // Only refit the view when the routed destination (last coordinate) changes,
+    // so live-tracking updates toward the same hydrant don't keep re-zooming.
+    const end = routeCoordinates[routeCoordinates.length - 1];
+    const endKey = `${end[0].toFixed(5)},${end[1].toFixed(5)}`;
+    if (endKey !== lastRouteEndRef.current) {
+      lastRouteEndRef.current = endKey;
+      map.fitBounds(line.getBounds(), { padding: [60, 60] });
+    }
   }, [routeCoordinates, routeDashed]);
 
   return <div ref={containerRef} className="absolute inset-0 bg-[#dce6ea]" />;

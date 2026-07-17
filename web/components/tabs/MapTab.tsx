@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppState } from '@/lib/app-state';
 import { api, ApiRequestError } from '@/lib/api';
 import type { Hydrant, NearestHydrantResult } from '@/lib/types';
@@ -27,6 +27,22 @@ function formatDuration(s: number | undefined | null) {
   return s < 60 ? '<1 min' : `${Math.round(s / 60)} min`;
 }
 
+// Great-circle distance in metres — used to debounce live-tracking re-searches
+// so we don't refetch the nearest hydrant on every tiny GPS jitter.
+function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Ignore accuracy re-searches closer together than this (metres).
+const LIVE_RESEARCH_MIN_MOVE = 40;
+
 export default function MapTab() {
   const { vehicles, activeVehicleId } = useAppState();
   const activeVehicle = vehicles.find((v) => v.id === activeVehicleId);
@@ -44,6 +60,10 @@ export default function MapTab() {
   );
   const [nearest, setNearest] = useState<NearestHydrantResult | null>(null);
   const [showLocPrompt, setShowLocPrompt] = useState(false);
+  const [liveTracking, setLiveTracking] = useState(false);
+  const [showSteps, setShowSteps] = useState(false);
+  const watchIdRef = useRef<number | null>(null);
+  const lastSearchPtRef = useRef<{ lat: number; lng: number } | null>(null);
 
   // Load every hydrant once. They're drawn as individual canvas circle markers,
   // so the whole country's worth stays on the map at all zoom levels without lag
@@ -82,14 +102,33 @@ export default function MapTab() {
     try {
       const result = await api.nearestHydrant({ lat: point.lat, lng: point.lng }, activeVehicle?.premerCevi);
       setNearest(result);
-    } catch {
-      // no candidates in view / OSRM unreachable — leave the fire pin without a match
+    } catch (err) {
+      // No mapped hydrant nearby (OSM coverage varies) — say so instead of
+      // leaving the fire pin silently unmatched.
+      if (err instanceof ApiRequestError && err.status === 404) {
+        setLocError(
+          activeVehicle
+            ? `V bližini ni hidranta s premerom ${Number(activeVehicle.premerCevi)} mm.`
+            : 'V bližini ni bilo mogoče najti hidranta.'
+        );
+      }
     } finally {
       setSearching(false);
     }
   }
 
+  function stopTracking() {
+    if (watchIdRef.current != null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setLiveTracking(false);
+  }
+
   function setFire(point: FirePoint & { kind?: 'me' | 'address' | 'map'; accuracy?: number }) {
+    // A manual pin (address / map tap) ends live GPS tracking.
+    stopTracking();
+    lastSearchPtRef.current = null;
     setFirePoint(point);
     setNotFound(false);
     setLocError(null);
@@ -116,9 +155,11 @@ export default function MapTab() {
     }
   }
 
-  // Actually ask the browser for a position. Kept separate from useMyLocation so
-  // the confirm pop-up can trigger it after the user opts in.
-  function requestLocation() {
+  // Start live tracking: watchPosition keeps the user's dot updating as they
+  // move (not a one-shot fix), and re-runs the nearest-hydrant search after
+  // meaningful movement. Kept separate from useMyLocation so the confirm pop-up
+  // can trigger it after the user opts in.
+  function startTracking() {
     setShowLocPrompt(false);
     setNotFound(false);
     setLocError(null);
@@ -126,16 +167,25 @@ export default function MapTab() {
       setLocError('Ta brskalnik ne podpira določanja lokacije.');
       return;
     }
+    if (watchIdRef.current != null) return; // already tracking
     setSearching(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        setFire({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          kind: 'me',
-          accuracy: Math.min(pos.coords.accuracy || 60, 200)
-        }),
+    lastSearchPtRef.current = null;
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const accuracy = Math.min(pos.coords.accuracy || 60, 200);
+        setLiveTracking(true);
+        // Move the live dot on every fix…
+        setFirePoint({ ...p, kind: 'me', accuracy });
+        // …but only re-run the (network) nearest search after real movement.
+        const last = lastSearchPtRef.current;
+        if (!last || metersBetween(last, p) > LIVE_RESEARCH_MIN_MOVE) {
+          lastSearchPtRef.current = p;
+          searchNearest(p);
+        }
+      },
       (err) => {
+        stopTracking();
         setSearching(false);
         if (err.code === err.PERMISSION_DENIED) {
           setLocError('Dostop do lokacije je zavrnjen. Omogoči ga v nastavitvah brskalnika in poskusi znova.');
@@ -145,16 +195,20 @@ export default function MapTab() {
           setLocError('Lokacije trenutno ni bilo mogoče določiti. Poskusi znova.');
         }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
     );
   }
 
-  // Show a short explainer before the browser's native permission prompt (like
-  // Google Maps), unless permission is already granted (locate straight away)
-  // or already blocked (tell the user how to re-enable it).
+  // Toggle live tracking. When starting: show a short explainer before the
+  // browser's native permission prompt (like Google Maps), unless permission is
+  // already granted (start straight away) or blocked (explain how to re-enable).
   async function useMyLocation() {
     setNotFound(false);
     setLocError(null);
+    if (liveTracking || watchIdRef.current != null) {
+      stopTracking();
+      return;
+    }
     if (!navigator.geolocation) {
       setLocError('Ta brskalnik ne podpira določanja lokacije.');
       return;
@@ -162,7 +216,7 @@ export default function MapTab() {
     try {
       const status = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
       if (status?.state === 'granted') {
-        requestLocation();
+        startTracking();
         return;
       }
       if (status?.state === 'denied') {
@@ -174,6 +228,13 @@ export default function MapTab() {
     }
     setShowLocPrompt(true);
   }
+
+  // Stop the geolocation watch when the map tab unmounts.
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
+    };
+  }, []);
 
   function openNav() {
     if (!nearest) return;
@@ -241,14 +302,18 @@ export default function MapTab() {
           <div className="flex gap-2 mt-2.5">
             <button
               onClick={useMyLocation}
-              className="flex items-center gap-1.5 bg-white border-none rounded-full py-2 px-3.5 text-[13px] font-semibold text-[#4A1212] cursor-pointer"
-              style={{ boxShadow: '0 4px 14px rgba(0,48,64,.12)' }}
+              className="flex items-center gap-1.5 border-none rounded-full py-2 px-3.5 text-[13px] font-semibold cursor-pointer"
+              style={{
+                background: liveTracking ? '#C62828' : '#fff',
+                color: liveTracking ? '#fff' : '#4A1212',
+                boxShadow: '0 4px 14px rgba(0,48,64,.12)'
+              }}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C62828" strokeWidth="2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={liveTracking ? '#fff' : '#C62828'} strokeWidth="2">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
               </svg>
-              Moja lokacija
+              {liveTracking ? 'Sledim ti' : 'Moja lokacija'}
             </button>
             <button
               onClick={() => setShowFilters((v) => !v)}
@@ -380,6 +445,29 @@ export default function MapTab() {
               </div>
             )}
 
+            {nearest?.route?.steps && nearest.route.steps.length > 0 && (
+              <div className="mb-4">
+                <button
+                  onClick={() => setShowSteps((v) => !v)}
+                  className="flex items-center justify-between w-full text-[13px] font-semibold text-[#4A1212] bg-[#F6F8FA] rounded-[10px] px-3.5 py-2.5 border-none cursor-pointer"
+                >
+                  <span>Navodila po korakih ({nearest.route.steps.length})</span>
+                  <span className="text-[#8A949E]">{showSteps ? '▲' : '▼'}</span>
+                </button>
+                {showSteps && (
+                  <ol className="mt-2 max-h-[140px] overflow-y-auto">
+                    {nearest.route.steps.map((step, i) => (
+                      <li key={i} className="flex gap-2.5 py-1.5 border-b border-[#ECEFF2] last:border-b-0">
+                        <span className="text-[12px] font-bold text-[#C62828] w-4 flex-shrink-0">{i + 1}.</span>
+                        <span className="flex-1 text-[13px] text-[#4A1212] leading-[1.4]">{step.text}</span>
+                        <span className="text-[12px] text-[#8A949E] flex-shrink-0">{formatDistance(step.distance)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2.5">
               <button
                 onClick={() => firePoint && searchNearest(firePoint)}
@@ -427,7 +515,7 @@ export default function MapTab() {
                   Prekliči
                 </button>
                 <button
-                  onClick={requestLocation}
+                  onClick={startTracking}
                   className="flex-1 bg-[#C62828] text-white border-none rounded-full py-3.5 font-semibold text-[15px] cursor-pointer"
                 >
                   Deli lokacijo
