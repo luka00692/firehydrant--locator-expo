@@ -1,13 +1,19 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useAppState } from '@/lib/app-state';
 import { api, ApiRequestError } from '@/lib/api';
 import type { Hydrant, NearestHydrantResult } from '@/lib/types';
 import type { FirePoint } from '@/components/HydrantMap';
 
 const HydrantMap = dynamic(() => import('@/components/HydrantMap'), { ssr: false });
+
+// Below this zoom the viewport can span most of the country, whose hydrant count
+// is far too large to render as individual markers. Kept in sync with the value
+// documented in HydrantMap. Defined here (not imported) so this server-rendered
+// module never pulls in Leaflet, which references `window` at import time.
+const MIN_HYDRANT_ZOOM = 12;
 
 type HydrantTypeFilter = 'vsi' | 'nadzemni' | 'podzemni';
 type PremerFilter = 'vsi' | 80 | 100 | 150;
@@ -43,25 +49,49 @@ export default function MapTab() {
     null
   );
   const [nearest, setNearest] = useState<NearestHydrantResult | null>(null);
+  const [zoomedOut, setZoomedOut] = useState(false);
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = hydrants.filter((h) => {
-    if (fType !== 'vsi' && hydrantType(h) !== fType) return false;
-    if (fPremer !== 'vsi' && Number(h.properties['fire_hydrant:diameter']) !== fPremer) return false;
-    return true;
-  });
+  // Memoized so the array reference is stable across unrelated re-renders (e.g.
+  // typing in the address box). A fresh reference on every render would make
+  // HydrantMap re-run its marker effect and rebuild every marker per keystroke.
+  const filtered = useMemo(
+    () =>
+      hydrants.filter((h) => {
+        if (fType !== 'vsi' && hydrantType(h) !== fType) return false;
+        if (fPremer !== 'vsi' && Number(h.properties['fire_hydrant:diameter']) !== fPremer) return false;
+        return true;
+      }),
+    [hydrants, fType, fPremer]
+  );
 
-  const onBoundsChange = useCallback((bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number }) => {
-    if (boundsTimer.current) clearTimeout(boundsTimer.current);
-    boundsTimer.current = setTimeout(async () => {
-      try {
-        const rows = await api.hydrantsInBounds(bounds);
-        setHydrants(rows);
-      } catch {
-        // keep showing whatever we already loaded
+  const onBoundsChange = useCallback(
+    (bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number; zoom: number }) => {
+      if (boundsTimer.current) clearTimeout(boundsTimer.current);
+      // Don't pull the whole country's hydrants when zoomed out — it returns
+      // tens of thousands of points and freezes the map.
+      if (bounds.zoom < MIN_HYDRANT_ZOOM) {
+        setZoomedOut(true);
+        setHydrants((prev) => (prev.length ? [] : prev));
+        return;
       }
-    }, 300);
-  }, []);
+      setZoomedOut(false);
+      boundsTimer.current = setTimeout(async () => {
+        try {
+          const rows = await api.hydrantsInBounds({
+            minLat: bounds.minLat,
+            minLon: bounds.minLon,
+            maxLat: bounds.maxLat,
+            maxLon: bounds.maxLon
+          });
+          setHydrants(rows);
+        } catch {
+          // keep showing whatever we already loaded
+        }
+      }, 300);
+    },
+    []
+  );
 
   async function searchNearest(point: FirePoint) {
     setSearching(true);
@@ -261,7 +291,7 @@ export default function MapTab() {
         </div>
 
         <div className="absolute bottom-2 left-3 z-[500] bg-white/85 rounded-md px-2.5 py-1 text-[11px] text-[#5C6770]">
-          {filtered.length} hidrantov v tem pogledu
+          {zoomedOut ? 'Povečaj zemljevid za prikaz hidrantov' : `${filtered.length} hidrantov v tem pogledu`}
         </div>
 
         {sel && (

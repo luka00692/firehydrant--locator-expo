@@ -33,10 +33,16 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'minLat, minLon, maxLat, maxLon are required' });
   }
 
+  // Cap the result set so a very wide viewport can never dump the whole
+  // country's hydrants onto the client (which locks up the map). The client
+  // also gates rendering by zoom; this is defense in depth. ORDER BY id keeps
+  // the truncated subset stable across pans instead of flickering.
   const { rows } = await getPool().query(
     `SELECT id, ST_Y(geom::geometry) AS lat, ST_X(geom::geometry) AS lon, properties
      FROM hydrants
-     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography`,
+     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+     ORDER BY id
+     LIMIT 2000`,
     [Number(minLon), Number(minLat), Number(maxLon), Number(maxLat)]
   );
   res.status(200).json(rows);
