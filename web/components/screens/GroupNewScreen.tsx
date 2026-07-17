@@ -4,8 +4,13 @@ import { useState } from 'react';
 import { useAppState } from '@/lib/app-state';
 import { api, ApiRequestError } from '@/lib/api';
 
+// Made-up demo group name for the "join an existing group" shortcut below —
+// joins (or auto-creates, see backend/api/groups/index.js) this fixed name
+// instead of asking the user to type one.
+const DEMO_GROUP_NAME = 'PGD Kamnik';
+
 export default function GroupNewScreen() {
-  const { setScreen, refreshGroup } = useAppState();
+  const { setScreen, setPendingGroupName, refreshGroup } = useAppState();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -24,6 +29,20 @@ export default function GroupNewScreen() {
       setScreen('app');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Ustvarjanje skupine ni uspelo.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function joinExisting() {
+    setError(null);
+    setLoading(true);
+    try {
+      await api.joinGroup(DEMO_GROUP_NAME);
+      setPendingGroupName(DEMO_GROUP_NAME);
+      setScreen('waiting');
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Pridružitev ni uspela.');
     } finally {
       setLoading(false);
     }
@@ -56,6 +75,13 @@ export default function GroupNewScreen() {
         className="w-full bg-[#C62828] text-white rounded-full py-4 font-semibold text-base cursor-pointer disabled:opacity-60 mt-4"
       >
         {loading ? 'Ustvarjam …' : 'Ustvari skupino'}
+      </button>
+      <button
+        onClick={joinExisting}
+        disabled={loading}
+        className="w-full bg-white text-[#4A1212] border border-[#D9DEE3] rounded-full py-3.5 font-semibold text-[15px] cursor-pointer disabled:opacity-60 mt-2.5"
+      >
+        Pridruži se že obstajajoči skupini
       </button>
     </div>
   );
