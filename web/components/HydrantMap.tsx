@@ -3,17 +3,15 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import type { Hydrant } from '@/lib/types';
 
 export interface FirePoint {
   lat: number;
   lng: number;
 }
-
-// NOTE: the zoom threshold that gates hydrant rendering lives in MapTab
-// (MIN_HYDRANT_ZOOM = 12). It is intentionally not exported from here — this
-// module imports Leaflet, which touches `window` at import time, so pulling a
-// value out of it into the server-rendered MapTab would break SSR/prerender.
 
 function hydrantType(h: Hydrant): 'nadzemni' | 'podzemni' {
   const t = h.properties['fire_hydrant:type'];
@@ -67,7 +65,6 @@ interface Props {
   routeCoordinates: [number, number][] | null;
   onHydrantClick: (h: Hydrant) => void;
   onMapClick: (pt: FirePoint) => void;
-  onBoundsChange: (bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number; zoom: number }) => void;
 }
 
 export default function HydrantMap({
@@ -76,19 +73,23 @@ export default function HydrantMap({
   firePoint,
   routeCoordinates,
   onHydrantClick,
-  onMapClick,
-  onBoundsChange
+  onMapClick
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const hydrantLayerRef = useRef<L.LayerGroup | null>(null);
+  // Every hydrant is drawn at all times; nearby ones collapse into cluster
+  // bubbles when zoomed out and expand as you zoom in, so tens of thousands of
+  // points stay smooth. The cluster group only holds hydrants.
+  const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+  // The fire pin / route / accuracy circle live in a separate overlay so
+  // refreshing hydrants never disturbs them.
   const overlayLayerRef = useRef<L.LayerGroup | null>(null);
   const fireMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
 
   // hydrant markers kept keyed by id so we can diff (add/remove only the delta)
-  // instead of tearing down and rebuilding the whole layer on every change.
+  // instead of rebuilding the whole set when the filter changes.
   const markersRef = useRef<Map<number, L.Marker>>(new Map());
   const hydrantByIdRef = useRef<Map<number, Hydrant>>(new Map());
   const selectedIdRef = useRef<number | null>(selectedHydrantId);
@@ -96,12 +97,10 @@ export default function HydrantMap({
   // callbacks captured in refs so the map-init effect doesn't need to re-run
   const onHydrantClickRef = useRef(onHydrantClick);
   const onMapClickRef = useRef(onMapClick);
-  const onBoundsChangeRef = useRef(onBoundsChange);
   useEffect(() => {
     onHydrantClickRef.current = onHydrantClick;
     onMapClickRef.current = onMapClick;
-    onBoundsChangeRef.current = onBoundsChange;
-  }, [onHydrantClick, onMapClick, onBoundsChange]);
+  }, [onHydrantClick, onMapClick]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -114,30 +113,22 @@ export default function HydrantMap({
     );
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-    // Hydrants live in their own layer; the fire pin / route / accuracy circle
-    // live in a separate overlay so refreshing hydrants never wipes them.
-    hydrantLayerRef.current = L.layerGroup().addTo(map);
+    clusterRef.current = L.markerClusterGroup({
+      chunkedLoading: true,
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: false,
+      maxClusterRadius: 60,
+      disableClusteringAtZoom: 18
+    }).addTo(map);
     overlayLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
     map.on('click', (e) => onMapClickRef.current({ lat: e.latlng.lat, lng: e.latlng.lng }));
-    const emitBounds = () => {
-      const b = map.getBounds();
-      onBoundsChangeRef.current({
-        minLat: b.getSouth(),
-        minLon: b.getWest(),
-        maxLat: b.getNorth(),
-        maxLon: b.getEast(),
-        zoom: map.getZoom()
-      });
-    };
-    map.on('moveend', emitBounds);
     const timer = setTimeout(() => {
       // React StrictMode's dev-only mount→unmount→remount can fire this after
       // cleanup already tore the map down — guard against acting on a dead map.
       if (cancelled) return;
       map.invalidateSize();
-      emitBounds();
     }, 150);
 
     return () => {
@@ -145,39 +136,43 @@ export default function HydrantMap({
       clearTimeout(timer);
       map.remove();
       mapRef.current = null;
+      clusterRef.current = null;
       markers.clear();
       hydrantById.clear();
     };
   }, []);
 
-  // hydrant markers — diff against what's already drawn
+  // hydrant markers — diff against what's already drawn, adding/removing in bulk
   useEffect(() => {
-    const layer = hydrantLayerRef.current;
-    if (!layer) return;
+    const cluster = clusterRef.current;
+    if (!cluster) return;
     const markers = markersRef.current;
     const byId = hydrantByIdRef.current;
 
     const nextIds = new Set<number>();
     for (const h of hydrants) nextIds.add(h.id);
 
-    // remove markers that left the viewport / filter
+    const toRemove: L.Marker[] = [];
     for (const [id, marker] of markers) {
       if (!nextIds.has(id)) {
-        layer.removeLayer(marker);
+        toRemove.push(marker);
         markers.delete(id);
         byId.delete(id);
       }
     }
 
-    // add markers that are newly present
+    const toAdd: L.Marker[] = [];
     for (const h of hydrants) {
       byId.set(h.id, h);
       if (markers.has(h.id)) continue;
       const marker = L.marker([h.lat, h.lon], { icon: iconFor(h, h.id === selectedIdRef.current) });
       marker.on('click', () => onHydrantClickRef.current(hydrantByIdRef.current.get(h.id) ?? h));
-      marker.addTo(layer);
       markers.set(h.id, marker);
+      toAdd.push(marker);
     }
+
+    if (toRemove.length) cluster.removeLayers(toRemove);
+    if (toAdd.length) cluster.addLayers(toAdd);
   }, [hydrants]);
 
   // selection highlight — recolor only the two affected markers
