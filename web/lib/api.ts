@@ -57,6 +57,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ tip, st_sedezev: stSedezev })
     }),
+  // TEMPORARY demo bypass — records a paket without going through real Stripe
+  // payment (see backend/api/groups/index.js). Remove once payments are wired up.
+  fakePurchase: (tip: PaketTip, stSedezev: number) =>
+    request<{ id: string }>('/api/groups', {
+      method: 'POST',
+      body: JSON.stringify({ fakePurchase: { tip, stSedezev } })
+    }),
 
   myGroups: () => request<Group[]>('/api/groups'),
   createGroup: (imeSkupine: string) =>

@@ -1,13 +1,6 @@
 const { applyCors } = require('../../lib/cors');
 const { requireAuth } = require('../../lib/auth');
-
-// Flat price per tier (matches web/components/screens/PackagesScreen.tsx),
-// each covering a fixed seat-count range rather than a per-seat price.
-const TIERS = {
-  osnovni: { priceCents: 499, minSeats: 1, maxSeats: 50 },
-  napredni: { priceCents: 1499, minSeats: 50, maxSeats: 100 },
-  premium: { priceCents: 2499, minSeats: 100, maxSeats: 200 }
-};
+const { validateTier, tierRangeError } = require('../../lib/packageTiers');
 
 // Requires STRIPE_SECRET_KEY. The purchase itself is only recorded once the
 // webhook confirms payment (api/webhooks/stripe.js), not here — see schema.sql's
@@ -25,15 +18,9 @@ module.exports = async function handler(req, res) {
   if (!user) return;
 
   const { tip, st_sedezev } = req.body || {};
-  const tier = TIERS[tip];
-  if (!tier || !Number.isInteger(st_sedezev) || st_sedezev < tier.minSeats || st_sedezev > tier.maxSeats) {
-    return res.status(400).json({
-      error: `tip must be one of ${Object.keys(TIERS).join('|')}, with st_sedezev in that tier's range (${Object.entries(
-        TIERS
-      )
-        .map(([t, { minSeats, maxSeats }]) => `${t}: ${minSeats}-${maxSeats}`)
-        .join(', ')})`
-    });
+  const tier = validateTier(tip, st_sedezev);
+  if (!tier) {
+    return res.status(400).json({ error: tierRangeError() });
   }
 
   const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);

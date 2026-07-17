@@ -12,22 +12,22 @@ const PACKAGE_DEFS: { tip: PaketTip; name: string; seatsLabel: string; price: st
 ];
 
 export default function PackagesScreen() {
-  const { setScreen, selectedPackage, setSelectedPackage } = useAppState();
+  const { setScreen, selectedPackage, setSelectedPackage, refreshGroup } = useAppState();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // TEMPORARY demo bypass: real payment (api.checkout, Stripe) isn't wired up
+  // yet, so this fakes a successful purchase instead of actually charging
+  // anything — see backend/api/groups/index.js and backend/README.md TODO.
   async function buyContinue() {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.checkout(selectedPackage.tip, selectedPackage.qty);
-      window.location.href = res.url;
+      await api.fakePurchase(selectedPackage.tip, selectedPackage.qty);
+      const existingGroup = await refreshGroup();
+      setScreen(existingGroup ? 'app' : 'groupNew');
     } catch (err) {
-      if (err instanceof ApiRequestError && err.status === 503) {
-        setError('Plačila trenutno niso na voljo — backend nima nastavljenega Stripe ključa (STRIPE_SECRET_KEY).');
-      } else {
-        setError(err instanceof ApiRequestError ? err.message : 'Nakup ni uspel.');
-      }
+      setError(err instanceof ApiRequestError ? err.message : 'Nakup ni uspel.');
     } finally {
       setLoading(false);
     }

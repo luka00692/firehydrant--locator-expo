@@ -2,6 +2,7 @@ const { getPool } = require('../../lib/db');
 const { applyCors } = require('../../lib/cors');
 const { respondIfDbError } = require('../../lib/dbError');
 const { requireAuth } = require('../../lib/auth');
+const { validateTier, tierRangeError } = require('../../lib/packageTiers');
 
 const SELECT_FIELDS = `id, lastnik_id AS "lastnikId", ime, st_sedezev AS "stSedezev", created_at AS "createdAt",
   ST_Y(lokacija_doma::geometry) AS lat, ST_X(lokacija_doma::geometry) AS lng`;
@@ -16,7 +17,32 @@ module.exports = async function handler(req, res) {
   const pool = getPool();
 
   if (req.method === 'POST') {
-    const { imeSkupine } = req.body || {};
+    const { imeSkupine, fakePurchase } = req.body || {};
+
+    // TEMPORARY demo bypass: /api/checkout (real Stripe) is excluded from the
+    // deploy anyway (see backend/README.md TODO) and Stripe isn't configured,
+    // so record a paket directly here — exactly what the webhook would do on
+    // a real payment — instead of actually charging anything. Folded into
+    // this already-deployed route rather than adding a new one, to stay
+    // under the Hobby plan's 12-function cap.
+    if (fakePurchase) {
+      const { tip, stSedezev } = fakePurchase;
+      const tier = validateTier(tip, stSedezev);
+      if (!tier) return res.status(400).json({ error: tierRangeError() });
+
+      try {
+        const { rows } = await pool.query(
+          `INSERT INTO paket (kupec_id, tip, st_sedezev) VALUES ($1, $2, $3)
+           RETURNING id, kupec_id AS "kupecId", skupina_id AS "skupinaId", tip, st_sedezev AS "stSedezev", created_at AS "createdAt"`,
+          [user.id, tip, stSedezev]
+        );
+        return res.status(201).json(rows[0]);
+      } catch (err) {
+        if (respondIfDbError(res, err)) return;
+        throw err;
+      }
+    }
+
     if (!imeSkupine) return res.status(400).json({ error: 'imeSkupine is required' });
 
     const client = await pool.connect();
