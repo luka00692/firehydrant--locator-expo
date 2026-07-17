@@ -1,14 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppState } from '@/lib/app-state';
 import { api, ApiRequestError } from '@/lib/api';
+
+const AUTO_SUBMIT_DELAY_MS = 600;
 
 export default function JoinScreen() {
   const { setScreen, setPendingGroupName } = useAppState();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const submittedRef = useRef(false);
 
   async function sendRequest() {
     const ime = name.trim();
@@ -20,6 +23,7 @@ export default function JoinScreen() {
     setLoading(true);
     try {
       await api.joinGroup(ime);
+      submittedRef.current = true;
       setPendingGroupName(ime);
       setScreen('waiting');
     } catch (err) {
@@ -36,6 +40,15 @@ export default function JoinScreen() {
       setLoading(false);
     }
   }
+
+  // Auto-submit shortly after typing stops, so entering a group name is
+  // enough to move forward without also having to press the button.
+  useEffect(() => {
+    if (submittedRef.current || !name.trim() || loading) return;
+    const timer = setTimeout(sendRequest, AUTO_SUBMIT_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name]);
 
   return (
     <div className="flex-1 flex flex-col justify-center px-7 pt-14 pb-10">
