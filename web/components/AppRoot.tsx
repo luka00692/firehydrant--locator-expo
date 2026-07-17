@@ -46,11 +46,7 @@ function CheckoutReturnHandler() {
 }
 
 function Screens() {
-  const { booting, screen } = useAppState();
-
-  if (booting) {
-    return <div className="flex-1 flex items-center justify-center text-[#8A949E] text-sm">Nalagam …</div>;
-  }
+  const { screen } = useAppState();
 
   switch (screen) {
     case 'onboarding':

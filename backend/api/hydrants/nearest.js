@@ -1,6 +1,7 @@
 const { getPool } = require('../../lib/db');
 const { applyCors } = require('../../lib/cors');
 const { fetchRoadRoute, fetchRoadRouteWithGeometry } = require('../../lib/routing');
+const { geocodeAddress } = require('../../lib/geocode');
 
 const CANDIDATE_LIMIT = 5;
 
@@ -9,14 +10,29 @@ const CANDIDATE_LIMIT = 5;
 // each via OSRM, and returns whichever is actually closest by road — not
 // just closest in a straight line. Route geometry (for drawing the path) is
 // only fetched once, for the winning candidate.
+//
+// Accepts either {lat, lng} directly, or {address} — folded in here (rather
+// than a separate /api/geocode route) to keep the Hobby plan's 12-function
+// deploy cap, see backend/README.md TODO. When given an address, the
+// geocoded point is echoed back as `point` so the caller can place a pin.
 module.exports = async function handler(req, res) {
   applyCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
 
-  const { lat, lng, premer } = req.body || {};
-  if (lat === undefined || lng === undefined) {
-    return res.status(400).json({ error: 'lat and lng are required' });
+  let { lat, lng, premer, address } = req.body || {};
+  let point;
+  if (address) {
+    try {
+      point = await geocodeAddress(address);
+    } catch (err) {
+      return res.status(502).json({ error: 'geocoding failed', detail: err.message });
+    }
+    if (!point) return res.status(404).json({ error: 'address not found' });
+    lat = point.lat;
+    lng = point.lon;
+  } else if (lat === undefined || lng === undefined) {
+    return res.status(400).json({ error: 'lat and lng, or address, are required' });
   }
 
   const params = [Number(lat), Number(lng)];
@@ -53,7 +69,7 @@ module.exports = async function handler(req, res) {
 
   // Road routing unavailable for every candidate — fall back to the closest
   // straight-line match instead of failing the whole request.
-  if (!best) return res.status(200).json({ hydrant: candidates[0], route: null });
+  if (!best) return res.status(200).json({ hydrant: candidates[0], route: null, point });
 
   try {
     const withGeometry = await fetchRoadRouteWithGeometry(from, { lat: best.hydrant.lat, lon: best.hydrant.lon });
@@ -62,5 +78,5 @@ module.exports = async function handler(req, res) {
     // keep the distance/duration we already have, just without a line to draw
   }
 
-  res.status(200).json(best);
+  res.status(200).json({ ...best, point });
 };

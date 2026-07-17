@@ -1,14 +1,13 @@
-# Hobby plan caps a deployment at 12 serverless functions; this repo has 19 route
-# files under api/ (api/vehicles/[id].js was folded into api/groups/[id]/vehicles.js
-# to free a slot for it — see that file's PATCH/DELETE handling). Excluding the
-# lowest-priority routes here until the rest are consolidated too (see README TODO)
-# or the account is upgraded to Pro.
+# Hobby plan caps a deployment at 12 serverless functions; this repo has 18 route
+# files under api/ (api/vehicles/[id].js was folded into api/groups/[id]/vehicles.js,
+# and api/geocode.js into api/hydrants/nearest.js, to free slots for them — see
+# those files' handling). Excluding the lowest-priority routes here until the rest
+# are consolidated too (see README TODO) or the account is upgraded to Pro.
 # Using ?id? instead of [id] because backslash-escaped brackets aren't honored
 # by Vercel's ignore matcher (verified via `vercel build` + inspecting .vercel/output).
 api/checkout/index.js
 api/webhooks/stripe.js
 api/cron/resync.js
-api/geocode.js
 api/groups/?id?/requests.js
 api/memberships/?id?.js
 api/health.js

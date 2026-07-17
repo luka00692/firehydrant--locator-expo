@@ -8,7 +8,6 @@ import type {
   Vehicle,
   PaketTip,
   NearestHydrantResult,
-  GeocodeResult,
   Hydrant,
   ApiError
 } from './types';
@@ -106,12 +105,21 @@ export const api = {
     request<Hydrant[]>(
       `/api/hydrants?minLat=${bounds.minLat}&minLon=${bounds.minLon}&maxLat=${bounds.maxLat}&maxLon=${bounds.maxLon}`
     ),
-  nearestHydrant: (lat: number, lng: number, premer?: number) =>
+  nearestHydrant: (point: { lat: number; lng: number } | { address: string }, premer?: number) =>
     request<NearestHydrantResult>('/api/hydrants/nearest', {
       method: 'POST',
-      body: JSON.stringify({ lat, lng, premer })
+      body: JSON.stringify({ ...point, premer })
     }),
   reportHydrant: (id: number, sporocilo: string) =>
     request<void>(`/api/hydrants/${id}/report`, { method: 'POST', body: JSON.stringify({ sporocilo }) }),
-  geocode: (q: string) => request<GeocodeResult>(`/api/geocode?q=${encodeURIComponent(q)}`)
+  // Geocoding is folded into /api/hydrants/nearest (see backend/README.md TODO)
+  // rather than its own route — this just discards the hydrant/route it also
+  // computes and keeps the resolved point.
+  geocode: async (q: string) => {
+    const { point } = await request<NearestHydrantResult>('/api/hydrants/nearest', {
+      method: 'POST',
+      body: JSON.stringify({ address: q })
+    });
+    return point!;
+  }
 };

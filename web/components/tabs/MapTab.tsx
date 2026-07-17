@@ -35,10 +35,13 @@ export default function MapTab() {
   const [addrInput, setAddrInput] = useState('');
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [fType, setFType] = useState<HydrantTypeFilter>('vsi');
   const [fPremer, setFPremer] = useState<PremerFilter>('vsi');
-  const [firePoint, setFirePoint] = useState<FirePoint | null>(null);
+  const [firePoint, setFirePoint] = useState<(FirePoint & { kind?: 'me' | 'address' | 'map'; accuracy?: number }) | null>(
+    null
+  );
   const [nearest, setNearest] = useState<NearestHydrantResult | null>(null);
   const boundsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -64,7 +67,7 @@ export default function MapTab() {
     setSearching(true);
     setNearest(null);
     try {
-      const result = await api.nearestHydrant(point.lat, point.lng, activeVehicle?.premerCevi);
+      const result = await api.nearestHydrant({ lat: point.lat, lng: point.lng }, activeVehicle?.premerCevi);
       setNearest(result);
     } catch {
       // no candidates in view / OSRM unreachable — leave the fire pin without a match
@@ -76,6 +79,7 @@ export default function MapTab() {
   function setFire(point: FirePoint & { kind?: 'me' | 'address' | 'map'; accuracy?: number }) {
     setFirePoint(point);
     setNotFound(false);
+    setLocError(null);
     searchNearest(point);
   }
 
@@ -84,17 +88,28 @@ export default function MapTab() {
     if (!q) return;
     setSearching(true);
     setNotFound(false);
+    setLocError(null);
+    setNearest(null);
     try {
-      const loc = await api.geocode(q);
-      setFire({ lat: loc.lat, lng: loc.lon, kind: 'address' });
+      const result = await api.nearestHydrant({ address: q }, activeVehicle?.premerCevi);
+      if (result.point) {
+        setFirePoint({ lat: result.point.lat, lng: result.point.lon, kind: 'address' });
+      }
+      setNearest(result);
     } catch (err) {
-      setSearching(false);
       if (err instanceof ApiRequestError && err.status === 404) setNotFound(true);
+    } finally {
+      setSearching(false);
     }
   }
 
   function useMyLocation() {
-    if (!navigator.geolocation) return;
+    setNotFound(false);
+    setLocError(null);
+    if (!navigator.geolocation) {
+      setLocError('Ta brskalnik ne podpira določanja lokacije.');
+      return;
+    }
     setSearching(true);
     navigator.geolocation.getCurrentPosition(
       (pos) =>
@@ -104,7 +119,10 @@ export default function MapTab() {
           kind: 'me',
           accuracy: Math.min(pos.coords.accuracy || 60, 200)
         }),
-      () => setSearching(false),
+      () => {
+        setSearching(false);
+        setLocError('Lokacije ni bilo mogoče pridobiti. Preveri dovoljenja za lokacijo v brskalniku.');
+      },
       { timeout: 6000, enableHighAccuracy: true }
     );
   }
@@ -160,6 +178,12 @@ export default function MapTab() {
           {notFound && (
             <div className="mt-1.5 bg-white rounded-lg px-3.5 py-2.5 text-[13px] text-[#8E1616]" style={{ boxShadow: '0 8px 24px rgba(0,48,64,.14)' }}>
               Naslova ni bilo mogoče najti. Poskusi z ulico in krajem (npr. »Glavni trg 1, Kranj«).
+            </div>
+          )}
+
+          {locError && (
+            <div className="mt-1.5 bg-white rounded-lg px-3.5 py-2.5 text-[13px] text-[#8E1616]" style={{ boxShadow: '0 8px 24px rgba(0,48,64,.14)' }}>
+              {locError}
             </div>
           )}
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiRequestError } from './api';
 import { clearToken, getToken, setToken } from './auth-storage';
 import type { Group, PaketTip, User, Vehicle } from './types';
@@ -18,7 +18,6 @@ export type Screen =
 export type Tab = 'map' | 'group' | 'vehicles' | 'profile';
 
 interface AppState {
-  booting: boolean;
   screen: Screen;
   tab: Tab;
   user: User | null;
@@ -39,12 +38,12 @@ interface AppActions {
   refreshVehicles: (groupId: string) => Promise<void>;
   selectVehicle: (id: string | null) => void;
   signOut: () => void;
+  finishOnboarding: () => Promise<void>;
 }
 
 const AppStateContext = createContext<(AppState & AppActions) | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [booting, setBooting] = useState(true);
   const [screen, setScreen] = useState<Screen>('onboarding');
   const [tab, setTab] = useState<Tab>('map');
   const [user, setUser] = useState<User | null>(null);
@@ -70,15 +69,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setActiveVehicleId((current) => current ?? list[0]?.id ?? null);
   }, []);
 
-  // Resume a session on load: if a token is stored, validate it and skip
-  // straight past onboarding/auth into the app if the user already has an
-  // approved group.
+  // Onboarding always shows first, every visit — even with a valid session.
+  // Resuming that session (and deciding where onboarding should lead: auth,
+  // package selection, or straight into an existing group) happens in the
+  // background here, and is only applied once the user finishes onboarding
+  // (see finishOnboarding), so it never skips the slides.
+  const bootRef = useRef<{ promise: Promise<Screen>; resolve: (screen: Screen) => void } | null>(null);
+  if (!bootRef.current) {
+    let resolve!: (screen: Screen) => void;
+    const promise = new Promise<Screen>((res) => {
+      resolve = res;
+    });
+    bootRef.current = { promise, resolve };
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function boot() {
       const token = getToken();
       if (!token) {
-        setBooting(false);
+        bootRef.current!.resolve('auth');
         return;
       }
       try {
@@ -87,17 +97,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setUser(sessionUser);
         const existingGroup = await refreshGroup();
         if (cancelled) return;
-        if (existingGroup) {
-          setScreen('app');
-        } else {
-          setScreen('packages');
-        }
+        bootRef.current!.resolve(existingGroup ? 'app' : 'packages');
       } catch (err) {
         if (err instanceof ApiRequestError && err.status === 401) {
           clearToken();
         }
-      } finally {
-        if (!cancelled) setBooting(false);
+        if (!cancelled) bootRef.current!.resolve('auth');
       }
     }
     boot();
@@ -105,6 +110,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const finishOnboarding = useCallback(async () => {
+    const dest = await bootRef.current!.promise;
+    setScreen(dest);
   }, []);
 
   useEffect(() => {
@@ -134,12 +144,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setGroup(null);
     setVehicles([]);
     setActiveVehicleId(null);
+    // Reset so a subsequent onboarding pass resolves to 'auth' instead of
+    // replaying whatever the original (pre-sign-out) session resolved to.
+    bootRef.current = { promise: Promise.resolve('auth'), resolve: () => {} };
     setScreen('onboarding');
   }, []);
 
   const value = useMemo(
     () => ({
-      booting,
       screen,
       tab,
       user,
@@ -156,10 +168,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       refreshGroup,
       refreshVehicles,
       selectVehicle,
-      signOut
+      signOut,
+      finishOnboarding
     }),
     [
-      booting,
       screen,
       tab,
       user,
@@ -172,7 +184,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       refreshGroup,
       refreshVehicles,
       selectVehicle,
-      signOut
+      signOut,
+      finishOnboarding
     ]
   );
 

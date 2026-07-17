@@ -42,20 +42,20 @@ const SLIDES = [
 ];
 
 export default function OnboardingScreen() {
-  const { setScreen } = useAppState();
+  const { finishOnboarding } = useAppState();
   const [slide, setSlide] = useState(0);
   const s = SLIDES[slide];
 
   function next() {
     if (slide < SLIDES.length - 1) setSlide(slide + 1);
-    else setScreen('auth');
+    else finishOnboarding();
   }
 
   return (
     <div className="flex-1 flex flex-col bg-[#4A1212] text-white px-7 pt-12 pb-8">
       <div className="flex justify-between items-center">
         <span className="text-sm font-bold tracking-wide">ABELIUM</span>
-        <button onClick={() => setScreen('auth')} className="text-white/60 text-sm cursor-pointer">
+        <button onClick={() => finishOnboarding()} className="text-white/60 text-sm cursor-pointer">
           Preskoči
         </button>
       </div>

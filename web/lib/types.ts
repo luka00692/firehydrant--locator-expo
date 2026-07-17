@@ -61,11 +61,7 @@ export interface Hydrant {
 export interface NearestHydrantResult {
   hydrant: Hydrant;
   route: { distance: number; duration: number; coordinates?: [number, number][] } | null;
-}
-
-export interface GeocodeResult {
-  lat: number;
-  lon: number;
+  point?: { lat: number; lon: number };
 }
 
 export interface ApiError {
